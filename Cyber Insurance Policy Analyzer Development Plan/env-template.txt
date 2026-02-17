@@ -1,0 +1,22 @@
+# Environment Variables Template for Vercel
+# Copy this to your Vercel project settings
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Webhook Security
+SUPABASE_WEBHOOK_SECRET=your-long-random-secret-here
+
+# Railway API Configuration
+RAILWAY_API_URL=https://your-railway-app.railway.app
+RAILWAY_API_KEY=your-railway-api-key-here
+
+# Sentry (Error Monitoring)
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+NEXT_PUBLIC_SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# How to generate SUPABASE_WEBHOOK_SECRET:
+# Run this in your terminal:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

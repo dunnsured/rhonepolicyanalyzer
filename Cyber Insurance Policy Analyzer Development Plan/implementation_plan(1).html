@@ -1,0 +1,260 @@
+
+            <div class="objectives">
+                <div class="objective-card">
+                    <h4>🔧 Stabilize the Platform</h4>
+                    <p>Address all 7 critical gaps to create a reliable end-to-end pipeline.</p>
+                </div>
+                <div class="objective-card">
+                    <h4>📊 Enhance Data Quality</h4>
+                    <p>Improve PDF extraction accuracy and introduce structured data processing.</p>
+                </div>
+                <div class="objective-card">
+                    <h4>🧠 Increase Analytical Depth</h4>
+                    <p>Add benchmarking, risk quantification, and explainable AI.</p>
+                </div>
+                <div class="objective-card">
+                    <h4>✨ Improve User Experience</h4>
+                    <p>Deliver real-time feedback, multi-format reports, and enhanced delivery options.</p>
+                </div>
+                <div class="objective-card">
+                    <h4>🔒 Ensure Scalability & Security</h4>
+                    <p>Implement a robust job queue, rate limiting, and comprehensive monitoring.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="overview" class="section">
+            <h2>2. Phased Implementation Plan</h2>
+            <p>The rollout is divided into three distinct phases, each with specific deliverables and objectives.</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Phase</th>
+                        <th>Title</th>
+                        <th>Duration</th>
+                        <th>Priority</th>
+                        <th>Key Deliverables</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>1</strong></td>
+                        <td>Critical Fixes & Foundation</td>
+                        <td>3-5 days</td>
+                        <td><span class="priority-critical">🔴 Immediate</span></td>
+                        <td>A stable, working pipeline with secure, reliable report delivery.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>2</strong></td>
+                        <td>Quality & Feature Enhancement</td>
+                        <td>5-7 days</td>
+                        <td><span class="priority-high">🟡 High</span></td>
+                        <td>Superior data extraction, deeper analysis with benchmarking, and more insightful reports.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>3</strong></td>
+                        <td>Production Hardening & Scale</td>
+                        <td>3-5 days</td>
+                        <td><span class="priority-medium">🟢 Medium</span></td>
+                        <td>A resilient, scalable, and observable platform ready for enterprise-level load.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="phase1" class="section">
+            <div class="phase-header">
+                <h2>3. Phase 1: Critical Fixes & Foundation</h2>
+                <p><strong>Goal:</strong> Stabilize the existing pipeline to ensure reliable, end-to-end processing and secure report delivery. This phase addresses the most severe issues preventing the system from functioning correctly.</p>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 1.1: Implement Server-Side Analysis Trigger</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> The current client-side trigger is unreliable and fails silently if the user navigates away.
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Use a Supabase Database Webhook to trigger the analysis from the backend upon a new policy insertion.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Create a New API Endpoint in the CRM (Vercel):</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>src/app/api/policies/auto-analyze/route.ts</code></li>
+                            <li><strong>Method:</strong> <code>POST</code></li>
+                            <li><strong>Logic:</strong> This endpoint will receive the webhook from Supabase. It should validate the secret, parse the payload, and then dispatch the analysis job to the Railway API as the current <code>/api/policies/[id]/analyze</code> endpoint does. This centralizes the dispatch logic.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Create the Database Trigger Function:</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>supabase/migrations/YYYYMMDDHHMMSS_add_auto_analyze_trigger.sql</code></li>
+                            <li><strong>SQL:</strong> Use the <code>plpgsql</code> function provided in the architecture document to perform an <code>http_post</code> to the new Vercel endpoint. Ensure the <code>WEBHOOK_SECRET</code> is stored securely in Supabase secrets.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Create the Database Trigger:</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>supabase/migrations/YYYYMMDDHHMMSS_add_auto_analyze_trigger.sql</code></li>
+                            <li><strong>SQL:</strong> Create an <code>AFTER INSERT</code> trigger on the <code>insurance_policies</code> table that executes the new function for each row.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Deprecate Client-Side Trigger:</strong> Remove the automatic <code>POST</code> request from the <code>insurance-policies-section.tsx</code> component.</li>
+                </ol>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 1.2: Fix Report Delivery & Storage</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> Reports are generated but not saved or delivered to the user. This involves multiple related gaps (Gaps #1, #2, #4, #5).
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Configure the Railway API to upload the generated PDF report to a new Supabase Storage bucket and update the CRM to allow users to download it.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Create New <code>reports</code> Bucket in Supabase Storage:</strong> Use the Supabase dashboard to create a new private bucket named <code>reports</code>.</li>
+                    <li><strong>Add <code>report_storage_path</code> Column to Database:</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>supabase/migrations/YYYYMMDDHHMMSS_add_report_storage_path.sql</code></li>
+                            <li><strong>SQL:</strong> <code>ALTER TABLE insurance_policies ADD COLUMN report_storage_path TEXT;</code></li>
+                        </ul>
+                    </li>
+                    <li><strong>Configure Supabase Client in Railway API:</strong>
+                        <ul>
+                            <li>Add <code>SUPABASE_URL</code> and <code>SUPABASE_KEY</code> (the <code>service_role</code> key) to Railway environment variables.</li>
+                            <li>Install the <code>supabase-py</code> library: <code>pip install supabase</code></li>
+                            <li>In <code>orchestrator.py</code>, after the report is generated, add a step to upload the file to the <code>reports</code> bucket and get its path.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Update Callback Payload:</strong> In <code>orchestrator.py</code>, add the <code>report_storage_path</code> to the JSON payload sent back to the Vercel CRM webhook.</li>
+                    <li><strong>Update CRM Webhook Handler:</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>/api/webhook/analysis-complete/route.ts</code></li>
+                            <li>Modify the handler to receive <code>report_storage_path</code> and save it to the corresponding <code>insurance_policies</code> record.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Add Download Button to CRM UI:</strong>
+                        <ul>
+                            <li><strong>File:</strong> <code>insurance-policies-section.tsx</code></li>
+                            <li>When a policy has a <code>completed</code> status and a <code>report_storage_path</code>, display a "Download Report" button. The button should generate a signed URL for the <code>report_storage_path</code> and open it in a new tab.</li>
+                        </ul>
+                    </li>
+                </ol>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 1.3: Enforce Webhook Signature Verification</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> Webhooks are not verified, creating a security vulnerability (Gap #3).
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Enforce HMAC-SHA256 signature verification on all incoming webhooks.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Railway API:</strong> In <code>webhook.py</code>, uncomment or implement the <code>verify_signature</code> dependency for the <code>/webhook/policy-uploaded</code> endpoint.</li>
+                    <li><strong>Vercel CRM:</strong> In <code>/api/webhook/analysis-complete/route.ts</code>, implement the same HMAC verification logic using the Node.js <code>crypto</code> module.</li>
+                    <li><strong>Secret Management:</strong> Ensure the shared secret is stored securely in both Vercel and Railway environment variables and is not hardcoded.</li>
+                </ol>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 1.4: Set Up Basic Monitoring and Logging</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> No visibility into errors or system performance.
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Integrate Sentry for error tracking and implement basic structured logging.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Integrate Sentry:</strong>
+                        <ul>
+                            <li>Add the Sentry SDK to both the Vercel (TypeScript) and Railway (Python) projects.</li>
+                            <li>Initialize Sentry with the appropriate DSN in the application startup.</li>
+                            <li>Wrap main processing logic in <code>try...except</code> blocks that capture exceptions to Sentry.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Implement Structured Logging:</strong>
+                        <ul>
+                            <li>Use <code>structlog</code> in the Railway API to log key events (e.g., <code>analysis_started</code>, <code>extraction_failed</code>, <code>analysis_completed</code>) with context like <code>policy_id</code> and <code>tenant_id</code>.</li>
+                        </ul>
+                    </li>
+                </ol>
+            </div>
+        </section>
+
+        <section id="phase2" class="section">
+            <div class="phase-header">
+                <h2>4. Phase 2: Quality & Feature Enhancement</h2>
+                <p><strong>Goal:</strong> Dramatically improve the quality of data extraction and the analytical depth of the reports. Introduce key user-facing features like real-time progress updates.</p>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 2.1: Integrate Advanced PDF Extraction</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> <code>pdfplumber</code> is not sufficient for scanned documents or complex layouts.
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Integrate the Unstructured.io API as the primary extraction strategy.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Create <code>EnhancedPDFExtractor</code> Class:</strong> In the Railway API, create a new class as outlined in the architecture document.</li>
+                    <li><strong>Implement Multi-Strategy Logic:</strong> Implement the <code>extract_from_url</code> method that tries Unstructured.io first and falls back to <code>pdfplumber</code>.</li>
+                    <li><strong>Handle Unstructured.io Output:</strong> Adapt the downstream code to handle the richer, element-based output from Unstructured.io, particularly for tables and titles.</li>
+                    <li><strong>API Key Management:</strong> Securely store the Unstructured.io API key in Railway environment variables.</li>
+                </ol>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 2.2: Implement Structured Data Extraction</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> Key policy data (limits, dates, etc.) is buried in unstructured text and not used in the analysis.
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Create a pre-AI regex-based extraction layer and a new database table to store this structured data.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Create <code>policy_structured_data</code> Table:</strong> Apply the SQL migration to add the new table.</li>
+                    <li><strong>Develop <code>StructuredDataExtractor</code> Class:</strong> In the Railway API, build the Python class with regex patterns for common policy fields.</li>
+                    <li><strong>Integrate into Orchestrator:</strong> In <code>orchestrator.py</code>, after text extraction, run the <code>StructuredDataExtractor</code> and save the results to the new table.</li>
+                    <li><strong>Enhance AI Prompts:</strong> Modify the <code>claude_analyzer.py</code> to fetch this structured data and inject it into the prompt for Phase 2 analysis, providing the AI with critical context.</li>
+                </ol>
+            </div>
+
+            <div class="task-card">
+                <h3>Task 2.3: Implement Real-Time Progress Updates</h3>
+                
+                <div class="problem">
+                    <strong>Problem:</strong> The UI provides no feedback during the 1-3 minute analysis time.
+                </div>
+                
+                <div class="solution">
+                    <strong>Solution:</strong> Use Supabase Realtime to push status updates from the backend to the frontend.
+                </div>
+
+                <h4>Implementation Steps:</h4>
+                <ol>
+                    <li><strong>Enable Realtime on <code>insurance_policies</code> Table:</strong> In the Supabase dashboard, enable Realtime for the table.</li>
+                    <li><strong>Update Status in Railway API:</strong> Throughout <code>orchestrator.py</code>, update the <code>analysis_status</code> in the database at each major step (e.g., <code>extracting_data</code>, <code>analyzing_policy</code>, <code>generating_report</code>).</li>
+(Content truncated due to size limit. Use line ranges to read remaining content)
