@@ -1,0 +1,201 @@
+# RhôneRisk Coverage Definitions
+# All coverage types evaluated in policy analysis
+
+categories:
+  third_party:
+    label: "Third-Party Liability Coverages"
+    coverages:
+      - name: "Network Security Liability"
+        key: "network_security_liability"
+        description: "Covers liability arising from unauthorized access, denial of service attacks, or transmission of malicious code from the insured's network."
+        key_factors:
+          - "Scope of covered security events"
+          - "Definition of 'security failure' or 'network security incident'"
+          - "Defense cost treatment (inside/outside limits)"
+          - "Third-party system access coverage"
+
+      - name: "Privacy Liability"
+        key: "privacy_liability"
+        description: "Covers liability for wrongful disclosure of private information, failure to protect PII/PHI, or violations of privacy laws."
+        key_factors:
+          - "Breadth of 'personal information' definition"
+          - "Coverage for both electronic and paper records"
+          - "Regulatory investigation sublimit"
+          - "Employee privacy coverage"
+
+      - name: "Media Liability"
+        key: "media_liability"
+        description: "Covers liability for defamation, libel, slander, copyright/trademark infringement in digital media."
+        key_factors:
+          - "Scope of covered media activities"
+          - "Online vs. offline coverage"
+          - "IP infringement coverage breadth"
+          - "Content review requirements"
+
+      - name: "Technology E&O"
+        key: "technology_eo"
+        description: "Covers liability arising from errors, omissions, or failures in technology products or services provided to third parties."
+        key_factors:
+          - "Definition of 'technology services'"
+          - "Professional services scope"
+          - "SLA failure coverage"
+          - "Downstream client impact"
+
+      - name: "Regulatory Defense & Penalties"
+        key: "regulatory_defense"
+        description: "Covers costs of defending regulatory investigations and, where insurable, resulting fines and penalties."
+        key_factors:
+          - "Scope of covered regulatory bodies"
+          - "Foreign regulatory coverage"
+          - "Civil penalty insurability"
+          - "Pre-investigation coverage"
+
+      - name: "PCI-DSS Assessments"
+        key: "pci_dss"
+        description: "Covers PCI compliance fines, assessments, and forensic investigation costs following a payment card breach."
+        key_factors:
+          - "Assessment limit adequacy"
+          - "Forensic investigation costs"
+          - "Card brand fines coverage"
+          - "Re-issuance cost coverage"
+
+  first_party:
+    label: "First-Party Coverages"
+    coverages:
+      - name: "Incident Response Costs"
+        key: "incident_response"
+        description: "Covers breach response expenses: forensics, legal, notification, credit monitoring, PR/crisis management."
+        key_factors:
+          - "Scope of covered expenses"
+          - "Panel vs. choice of vendor"
+          - "Pre-breach preparation coverage"
+          - "Voluntary notification coverage"
+
+      - name: "Business Interruption - Cyber Event"
+        key: "bi_cyber"
+        description: "Covers income loss and extra expenses from business interruption caused by a cyber security event."
+        key_factors:
+          - "Waiting period duration"
+          - "Period of restoration"
+          - "Income calculation method"
+          - "Extra expense coverage"
+
+      - name: "Business Interruption - System Failure"
+        key: "bi_system_failure"
+        description: "Covers business interruption from non-malicious system failures (software bugs, configuration errors, updates)."
+        key_factors:
+          - "Separate vs. shared trigger with cyber BI"
+          - "Waiting period (often longer than cyber BI)"
+          - "Sublimit adequacy"
+          - "Definition of 'system failure'"
+
+      - name: "Dependent Business Interruption"
+        key: "dependent_bi"
+        description: "Covers income loss from disruption to key third-party providers (cloud, SaaS, MSP, supply chain)."
+        key_factors:
+          - "Named vs. unnamed vendors"
+          - "Service provider definition breadth"
+          - "Separate waiting period"
+          - "Sublimit adequacy"
+
+      - name: "Data Recovery & Restoration"
+        key: "data_recovery"
+        description: "Covers costs to restore, recreate, or replace data and software damaged by a covered event."
+        key_factors:
+          - "Scope of covered data types"
+          - "Recreation cost coverage"
+          - "Hardware vs. software distinction"
+          - "Cloud data coverage"
+
+      - name: "Hardware Replacement"
+        key: "hardware_replacement"
+        description: "Covers the cost to replace hardware rendered inoperable by a cyber event (e.g., bricking attacks)."
+        key_factors:
+          - "Replacement vs. repair coverage"
+          - "Sublimit adequacy"
+          - "Definition of covered hardware"
+          - "Depreciation treatment"
+
+      - name: "Cyber Extortion / Ransomware"
+        key: "cyber_extortion"
+        description: "Covers ransom payments, negotiation costs, and related expenses in response to extortion demands."
+        key_factors:
+          - "Ransom payment coverage"
+          - "Cryptocurrency payment support"
+          - "Negotiation service coverage"
+          - "OFAC compliance provisions"
+
+  cyber_crime:
+    label: "Cyber Crime Coverages"
+    coverages:
+      - name: "Social Engineering Fraud"
+        key: "social_engineering"
+        description: "Covers direct financial loss from social engineering attacks (BEC, impersonation, phishing-induced transfers)."
+        key_factors:
+          - "Sublimit adequacy (benchmark: ≥20% of aggregate)"
+          - "Verification procedure requirements"
+          - "Definition of 'social engineering'"
+          - "Employee vs. third-party inducement"
+
+      - name: "Funds Transfer Fraud"
+        key: "funds_transfer"
+        description: "Covers unauthorized electronic transfer of funds from the insured's accounts."
+        key_factors:
+          - "Computer-initiated vs. human-initiated coverage"
+          - "Voluntary parting exclusion impact"
+          - "Authentication bypass coverage"
+          - "Recovery obligation provisions"
+
+      - name: "Computer Fraud"
+        key: "computer_fraud"
+        description: "Covers direct financial loss from unauthorized access to or manipulation of computer systems."
+        key_factors:
+          - "Definition of 'computer fraud'"
+          - "Direct vs. indirect loss coverage"
+          - "Third-party system access"
+          - "Cryptocurrency theft coverage"
+
+      - name: "Telephone Fraud"
+        key: "telephone_fraud"
+        description: "Covers unauthorized use of the insured's telephone systems resulting in fraudulent charges."
+        key_factors:
+          - "PBX/VoIP system coverage"
+          - "Sublimit adequacy"
+          - "Duration of covered charges"
+          - "Detection requirements"
+
+      - name: "Invoice Manipulation"
+        key: "invoice_manipulation"
+        description: "Covers losses from altered payment instructions through compromised vendor invoices or email accounts."
+        key_factors:
+          - "Vendor email compromise coverage"
+          - "Internal email compromise coverage"
+          - "Verification requirement"
+          - "Discovery period"
+
+      - name: "Cryptojacking"
+        key: "cryptojacking"
+        description: "Covers losses from unauthorized use of computing resources for cryptocurrency mining."
+        key_factors:
+          - "Electricity cost coverage"
+          - "Hardware degradation coverage"
+          - "Detection and remediation"
+          - "Cloud resource exploitation"
+
+      - name: "Vendor/Client Payment Fraud"
+        key: "vendor_payment_fraud"
+        description: "Covers losses when payments are misdirected due to compromised vendor or client communications."
+        key_factors:
+          - "Inbound vs. outbound payment coverage"
+          - "Client funds held in trust"
+          - "Verification procedure requirements"
+          - "Recovery efforts coverage"
+
+      - name: "Criminal Reward"
+        key: "criminal_reward"
+        description: "Covers rewards offered for information leading to the arrest and conviction of perpetrators."
+        key_factors:
+          - "Reward amount limit"
+          - "Conviction requirement"
+          - "Carrier approval requirement"
+          - "Sublimit adequacy"

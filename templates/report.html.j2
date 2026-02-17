@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RhôneRisk Policy Analysis — {{ metadata.named_insured or 'Policy Analysis' }}</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+{# ===== COVER PAGE ===== #}
+<div class="cover-page">
+    <img src="assets/RhoneRiskLogo1.png" alt="RhôneRisk Advisory" class="cover-logo" onerror="this.style.display='none'">
+    <div class="cover-title">Cyber Insurance<br>Policy Analysis</div>
+    <div class="cover-subtitle">Comprehensive Coverage Maturity Assessment</div>
+    <div class="cover-info">
+        {% if metadata.named_insured %}<strong>Prepared for:</strong> {{ metadata.named_insured }}<br>{% endif %}
+        {% if metadata.carrier_name %}<strong>Carrier:</strong> {{ metadata.carrier_name }}<br>{% endif %}
+        {% if metadata.policy_number %}<strong>Policy:</strong> {{ metadata.policy_number }}<br>{% endif %}
+        {% if metadata.effective_date %}<strong>Policy Period:</strong> {{ metadata.effective_date }}{% if metadata.expiration_date %} to {{ metadata.expiration_date }}{% endif %}<br>{% endif %}
+        <strong>Analysis Date:</strong> {{ generation_date }}<br>
+        <strong>Prepared by:</strong> RhôneRisk Advisory
+    </div>
+    <div class="cover-classification">CONFIDENTIAL — CLIENT USE ONLY</div>
+</div>
+
+{# ===== EXECUTIVE SUMMARY ===== #}
+<div class="section">
+    <h1>1. Executive Summary</h1>
+
+    <div class="overall-score-container">
+        <div class="overall-score-number {{ score_color(overall_score | round | int) }}">
+            {{ "%.1f" | format(overall_score) }}
+        </div>
+        <div class="overall-score-details">
+            <div class="overall-score-label">Overall Policy Maturity Score</div>
+            <div class="overall-score-rating">{{ overall_rating }}</div>
+        </div>
+        <div>
+            <div class="overall-score-label">Red Flags</div>
+            <div class="overall-score-rating {% if red_flag_count > 0 %}score-none{% else %}score-superior{% endif %}">
+                {{ red_flag_count }}
+            </div>
+        </div>
+    </div>
+
+    {# Binding Recommendation Box #}
+    {% set rec_class = {
+        'Recommend Binding': 'binding-rec-recommend',
+        'Bind with Conditions': 'binding-rec-conditions',
+        'Require Major Modifications': 'binding-rec-modifications',
+        'Recommend Decline': 'binding-rec-decline'
+    } %}
+    <div class="binding-rec {{ rec_class.get(binding_recommendation, 'binding-rec-conditions') }}">
+        <div class="binding-rec-title">{{ binding_recommendation | upper }}</div>
+        <div class="binding-rec-rationale">{{ binding_rationale }}</div>
+    </div>
+
+    <div class="section-content">
+        {{ sections.executive_summary | replace('\n', '<br>') }}
+    </div>
+</div>
+
+{# ===== POLICY DECLARATIONS ===== #}
+<div class="section page-break">
+    <h1>2. Policy Declarations</h1>
+    <table>
+        <thead><tr><th>Field</th><th>Details</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Policy Number</strong></td><td>{{ metadata.policy_number or 'N/A' }}</td></tr>
+            <tr><td><strong>Carrier</strong></td><td>{{ metadata.carrier_name or 'N/A' }}</td></tr>
+            <tr><td><strong>Named Insured</strong></td><td>{{ metadata.named_insured or 'N/A' }}</td></tr>
+            <tr><td><strong>Effective Date</strong></td><td>{{ metadata.effective_date or 'N/A' }}</td></tr>
+            <tr><td><strong>Expiration Date</strong></td><td>{{ metadata.expiration_date or 'N/A' }}</td></tr>
+            <tr><td><strong>Aggregate Limit</strong></td><td>{{ metadata.aggregate_limit or 'N/A' }}</td></tr>
+            <tr><td><strong>Per Occurrence Limit</strong></td><td>{{ metadata.per_occurrence_limit or 'N/A' }}</td></tr>
+            <tr><td><strong>Deductible/Retention</strong></td><td>{{ metadata.deductible or 'N/A' }}</td></tr>
+            <tr><td><strong>Annual Premium</strong></td><td>{{ metadata.premium or 'N/A' }}</td></tr>
+            <tr><td><strong>Retroactive Date</strong></td><td>{{ metadata.retroactive_date or 'N/A' }}</td></tr>
+            <tr><td><strong>Policy Form</strong></td><td>{{ metadata.policy_form or 'N/A' }}</td></tr>
+        </tbody>
+    </table>
+
+    {% if sections.policy_overview %}
+    <div class="section-content">
+        {{ sections.policy_overview | replace('\n', '<br>') }}
+    </div>
+    {% endif %}
+</div>
+
+{# ===== COVERAGE SCORING MATRIX ===== #}
+<div class="section page-break">
+    <h1>3. Coverage Scoring Matrix</h1>
+
+    {% if sections.coverage_scoring_matrix %}
+    <div class="section-content mb-1">
+        {{ sections.coverage_scoring_matrix | replace('\n', '<br>') }}
+    </div>
+    {% endif %}
+
+    {# Third-Party Liability #}
+    <h2>Third-Party Liability Coverages</h2>
+    <table>
+        <thead>
+            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
+        </thead>
+        <tbody>
+        {% for s in third_party_scores %}
+            <tr>
+                <td><strong>{{ s.coverage_name }}</strong></td>
+                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
+                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
+                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {# First-Party #}
+    <h2>First-Party Coverages</h2>
+    <table>
+        <thead>
+            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
+        </thead>
+        <tbody>
+        {% for s in first_party_scores %}
+            <tr>
+                <td><strong>{{ s.coverage_name }}</strong></td>
+                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
+                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
+                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {# Cyber Crime #}
+    <h2>Cyber Crime Coverages</h2>
+    <table>
+        <thead>
+            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
+        </thead>
+        <tbody>
+        {% for s in cyber_crime_scores %}
+            <tr>
+                <td><strong>{{ s.coverage_name }}</strong></td>
+                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
+                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
+                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# ===== DETAILED COVERAGE ANALYSIS ===== #}
+<div class="section page-break">
+    <h1>4. Third-Party Liability Analysis</h1>
+    <div class="section-content">
+        {{ sections.third_party_analysis | replace('\n', '<br>') }}
+    </div>
+
+    {% for s in third_party_scores %}
+    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
+    <p>{{ s.justification }}</p>
+    {% if s.red_flags %}
+    <div class="red-flag-alert">
+        <div class="red-flag-title">Red Flags</div>
+        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% if s.recommendations %}
+    <p><strong>Recommendations:</strong></p>
+    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<div class="section page-break">
+    <h1>5. First-Party Coverage Analysis</h1>
+    <div class="section-content">
+        {{ sections.first_party_analysis | replace('\n', '<br>') }}
+    </div>
+
+    {% for s in first_party_scores %}
+    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
+    <p>{{ s.justification }}</p>
+    {% if s.red_flags %}
+    <div class="red-flag-alert">
+        <div class="red-flag-title">Red Flags</div>
+        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% if s.recommendations %}
+    <p><strong>Recommendations:</strong></p>
+    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<div class="section page-break">
+    <h1>6. Cyber Crime Coverage Analysis</h1>
+    <div class="section-content">
+        {{ sections.cyber_crime_analysis | replace('\n', '<br>') }}
+    </div>
+
+    {% for s in cyber_crime_scores %}
+    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
+    <p>{{ s.justification }}</p>
+    {% if s.red_flags %}
+    <div class="red-flag-alert">
+        <div class="red-flag-title">Red Flags</div>
+        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% if s.recommendations %}
+    <p><strong>Recommendations:</strong></p>
+    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% endfor %}
+</div>
+
+{# ===== EXCLUSION ANALYSIS ===== #}
+<div class="section page-break">
+    <h1>7. Exclusion Analysis</h1>
+    <div class="section-content">
+        {{ sections.exclusion_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+
+{# ===== POLICY TERMS ===== #}
+<div class="section page-break">
+    <h1>8. Policy Terms & Critical Features</h1>
+    <div class="section-content">
+        {{ sections.policy_terms_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+
+{# ===== GAP ANALYSIS ===== #}
+<div class="section page-break">
+    <h1>9. Coverage Gap Analysis</h1>
+
+    {% if critical_gaps %}
+    <h2>Critical Gaps</h2>
+    {% for gap in critical_gaps %}
+    <div class="red-flag-alert">{{ gap }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="section-content">
+        {{ sections.gap_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+
+{# ===== RED FLAG SUMMARY ===== #}
+{% if sections.red_flag_summary %}
+<div class="section page-break">
+    <h1>10. Red Flag Summary</h1>
+    <div class="section-content">
+        {{ sections.red_flag_summary | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== SCENARIO ANALYSIS ===== #}
+{% if sections.scenario_analysis %}
+<div class="section page-break">
+    <h1>11. Risk Quantification & Scenario Analysis</h1>
+    <div class="section-content">
+        {{ sections.scenario_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== BENCHMARKING ===== #}
+{% if sections.benchmarking_analysis %}
+<div class="section page-break">
+    <h1>12. Benchmarking Analysis</h1>
+    <div class="section-content">
+        {{ sections.benchmarking_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== INDUSTRY-SPECIFIC ===== #}
+{% if sections.msp_specific_analysis %}
+<div class="section page-break">
+    <h1>13. Industry-Specific Considerations</h1>
+    <div class="section-content">
+        {{ sections.msp_specific_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== REGULATORY COMPLIANCE ===== #}
+{% if sections.regulatory_compliance %}
+<div class="section page-break">
+    <h1>14. Compliance & Regulatory Considerations</h1>
+    <div class="section-content">
+        {{ sections.regulatory_compliance | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== RECOMMENDATIONS ===== #}
+<div class="section page-break">
+    <h1>15. Recommendations & Implementation Roadmap</h1>
+    <div class="section-content">
+        {{ sections.recommendations | replace('\n', '<br>') }}
+    </div>
+</div>
+
+{# ===== BINDING RECOMMENDATION ===== #}
+<div class="section page-break">
+    <h1>16. Final Binding Recommendation</h1>
+
+    <div class="binding-rec {{ rec_class.get(binding_recommendation, 'binding-rec-conditions') }}">
+        <div class="binding-rec-title">{{ binding_recommendation | upper }}</div>
+        <div class="binding-rec-rationale">{{ binding_rationale }}</div>
+    </div>
+
+    {% if sections.binding_recommendation %}
+    <div class="section-content">
+        {{ sections.binding_recommendation | replace('\n', '<br>') }}
+    </div>
+    {% endif %}
+</div>
+
+{# ===== ADDITIONAL SECTIONS ===== #}
+{% if sections.incident_response_evaluation %}
+<div class="section page-break">
+    <h1>17. Incident Response Evaluation</h1>
+    <div class="section-content">
+        {{ sections.incident_response_evaluation | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{% if sections.business_interruption_analysis %}
+<div class="section">
+    <h1>18. Business Interruption Analysis</h1>
+    <div class="section-content">
+        {{ sections.business_interruption_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{% if sections.social_engineering_analysis %}
+<div class="section">
+    <h1>19. Social Engineering Analysis</h1>
+    <div class="section-content">
+        {{ sections.social_engineering_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{% if sections.vendor_dependency_analysis %}
+<div class="section">
+    <h1>20. Vendor & Dependency Analysis</h1>
+    <div class="section-content">
+        {{ sections.vendor_dependency_analysis | replace('\n', '<br>') }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== DOCUMENT CONTROL ===== #}
+<div class="section page-break">
+    <h1>21. Document Control</h1>
+    <table>
+        <thead><tr><th>Field</th><th>Details</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Document Title</strong></td><td>Cyber Insurance Policy Analysis</td></tr>
+            <tr><td><strong>Client</strong></td><td>{{ metadata.named_insured or 'N/A' }}</td></tr>
+            <tr><td><strong>Version</strong></td><td>1.0</td></tr>
+            <tr><td><strong>Generated</strong></td><td>{{ generation_date }}</td></tr>
+            <tr><td><strong>Classification</strong></td><td>Confidential — Client Use Only</td></tr>
+            <tr><td><strong>Prepared By</strong></td><td>RhôneRisk Advisory (Automated Analysis)</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{# ===== CONFIDENTIALITY NOTICE ===== #}
+<div class="confidentiality-notice">
+    This document contains confidential and proprietary information. It is intended solely for the use of the
+    individual or entity to whom it is addressed. If you are not the intended recipient, you are hereby notified
+    that any disclosure, copying, distribution, or taking of any action in reliance on the contents of this
+    information is strictly prohibited.
+</div>
+
+</body>
+</html>

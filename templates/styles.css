@@ -1,0 +1,354 @@
+/* RhôneRisk Cyber Insurance Policy Analysis Report Styles */
+
+/* === Brand Colors === */
+:root {
+    --rhone-navy: #1a2332;
+    --rhone-dark-blue: #2c3e50;
+    --rhone-cyan: #00b4d8;
+    --rhone-light-cyan: #90e0ef;
+    --rhone-white: #ffffff;
+    --rhone-light-gray: #f8f9fa;
+    --rhone-gray: #6c757d;
+    --rhone-dark-gray: #343a40;
+
+    --color-superior: #198754;
+    --color-average: #0d6efd;
+    --color-basic: #fd7e14;
+    --color-none: #dc3545;
+
+    --color-superior-bg: #d1e7dd;
+    --color-average-bg: #cfe2ff;
+    --color-basic-bg: #fff3cd;
+    --color-none-bg: #f8d7da;
+}
+
+/* === Base Styles === */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+    color: var(--rhone-dark-gray);
+}
+
+/* === Page Layout (CSS Paged Media) === */
+@page {
+    size: letter;
+    margin: 1in 0.75in;
+
+    @top-center {
+        content: "RhôneRisk Advisory — Confidential";
+        font-size: 8pt;
+        color: var(--rhone-gray);
+    }
+
+    @bottom-left {
+        content: "Cyber Insurance Policy Analysis";
+        font-size: 8pt;
+        color: var(--rhone-gray);
+    }
+
+    @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: var(--rhone-gray);
+    }
+}
+
+@page :first {
+    @top-center { content: none; }
+    @bottom-left { content: none; }
+    @bottom-right { content: none; }
+}
+
+/* === Cover Page === */
+.cover-page {
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    text-align: center;
+    padding: 2in 1in;
+}
+
+.cover-logo {
+    max-width: 250px;
+    margin-bottom: 2em;
+}
+
+.cover-title {
+    font-size: 28pt;
+    font-weight: 700;
+    color: var(--rhone-navy);
+    margin-bottom: 0.3em;
+    line-height: 1.2;
+}
+
+.cover-subtitle {
+    font-size: 14pt;
+    color: var(--rhone-cyan);
+    margin-bottom: 2em;
+    font-weight: 400;
+}
+
+.cover-info {
+    font-size: 11pt;
+    color: var(--rhone-gray);
+    line-height: 1.8;
+}
+
+.cover-info strong {
+    color: var(--rhone-dark-gray);
+}
+
+.cover-classification {
+    margin-top: 3em;
+    padding: 0.5em 2em;
+    border: 2px solid var(--rhone-navy);
+    color: var(--rhone-navy);
+    font-weight: 600;
+    font-size: 10pt;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+/* === Section Headings === */
+h1 {
+    font-size: 18pt;
+    color: var(--rhone-navy);
+    border-bottom: 3px solid var(--rhone-cyan);
+    padding-bottom: 0.3em;
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+    page-break-after: avoid;
+}
+
+h2 {
+    font-size: 14pt;
+    color: var(--rhone-dark-blue);
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+    page-break-after: avoid;
+}
+
+h3 {
+    font-size: 11pt;
+    color: var(--rhone-dark-blue);
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+    page-break-after: avoid;
+}
+
+/* === Overall Score Display === */
+.overall-score-container {
+    display: flex;
+    align-items: center;
+    gap: 1.5em;
+    padding: 1em 1.5em;
+    background: var(--rhone-light-gray);
+    border-left: 5px solid var(--rhone-cyan);
+    margin: 1em 0;
+    page-break-inside: avoid;
+}
+
+.overall-score-number {
+    font-size: 36pt;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.overall-score-details {
+    flex: 1;
+}
+
+.overall-score-label {
+    font-size: 9pt;
+    color: var(--rhone-gray);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.overall-score-rating {
+    font-size: 14pt;
+    font-weight: 600;
+}
+
+/* === Tables === */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.8em 0;
+    font-size: 9pt;
+    page-break-inside: auto;
+}
+
+thead {
+    background-color: var(--rhone-navy);
+    color: var(--rhone-white);
+}
+
+th {
+    padding: 0.5em 0.6em;
+    text-align: left;
+    font-weight: 600;
+    font-size: 9pt;
+}
+
+td {
+    padding: 0.4em 0.6em;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: top;
+}
+
+tr:nth-child(even) {
+    background-color: var(--rhone-light-gray);
+}
+
+tr {
+    page-break-inside: avoid;
+}
+
+/* === Score Badges === */
+.badge {
+    display: inline-block;
+    padding: 0.2em 0.6em;
+    border-radius: 3px;
+    font-size: 8pt;
+    font-weight: 600;
+    text-align: center;
+    min-width: 2em;
+}
+
+.badge-superior {
+    background-color: var(--color-superior-bg);
+    color: var(--color-superior);
+}
+
+.badge-average {
+    background-color: var(--color-average-bg);
+    color: var(--color-average);
+}
+
+.badge-basic {
+    background-color: var(--color-basic-bg);
+    color: var(--color-basic);
+}
+
+.badge-none {
+    background-color: var(--color-none-bg);
+    color: var(--color-none);
+}
+
+/* Score number colors */
+.score-superior { color: var(--color-superior); }
+.score-average { color: var(--color-average); }
+.score-basic { color: var(--color-basic); }
+.score-none { color: var(--color-none); }
+
+/* === Binding Recommendation === */
+.binding-rec {
+    padding: 1em 1.5em;
+    margin: 1em 0;
+    border-radius: 4px;
+    page-break-inside: avoid;
+}
+
+.binding-rec-recommend { background-color: var(--color-superior-bg); border-left: 5px solid var(--color-superior); }
+.binding-rec-conditions { background-color: var(--color-average-bg); border-left: 5px solid var(--color-average); }
+.binding-rec-modifications { background-color: var(--color-basic-bg); border-left: 5px solid var(--color-basic); }
+.binding-rec-decline { background-color: var(--color-none-bg); border-left: 5px solid var(--color-none); }
+
+.binding-rec-title {
+    font-size: 12pt;
+    font-weight: 700;
+    margin-bottom: 0.3em;
+}
+
+.binding-rec-rationale {
+    font-size: 10pt;
+    line-height: 1.5;
+}
+
+/* === Red Flag Alert === */
+.red-flag-alert {
+    background-color: var(--color-none-bg);
+    border-left: 5px solid var(--color-none);
+    padding: 0.8em 1em;
+    margin: 0.5em 0;
+    page-break-inside: avoid;
+}
+
+.red-flag-title {
+    color: var(--color-none);
+    font-weight: 700;
+    font-size: 10pt;
+}
+
+/* === Section Content === */
+.section {
+    page-break-before: auto;
+    margin-bottom: 1.5em;
+}
+
+.section-content {
+    line-height: 1.6;
+}
+
+.section-content p {
+    margin-bottom: 0.6em;
+}
+
+/* === Score Summary Bar === */
+.score-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0.2em 0;
+}
+
+.score-bar-fill {
+    height: 8px;
+    border-radius: 4px;
+    background-color: var(--rhone-light-gray);
+    flex: 1;
+    overflow: hidden;
+}
+
+.score-bar-value {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.score-bar-label {
+    font-size: 8pt;
+    min-width: 2em;
+    text-align: right;
+    font-weight: 600;
+}
+
+/* === Confidentiality Footer === */
+.confidentiality-notice {
+    margin-top: 3em;
+    padding: 1em;
+    border: 1px solid var(--rhone-gray);
+    font-size: 8pt;
+    color: var(--rhone-gray);
+    text-align: center;
+    font-style: italic;
+}
+
+/* === Utilities === */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.fw-bold { font-weight: 700; }
+.mt-1 { margin-top: 0.5em; }
+.mb-1 { margin-bottom: 0.5em; }
+.page-break { page-break-before: always; }

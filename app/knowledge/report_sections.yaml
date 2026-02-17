@@ -1,0 +1,129 @@
+# RhôneRisk 21-Section Analysis Framework
+# Defines the structure and content requirements for each report section
+
+sections:
+  - number: 1
+    title: "Document Header & Client Information"
+    key: "document_header"
+    source: "metadata"
+    description: "Company logo, report title, client name, date, confidentiality notice."
+
+  - number: 2
+    title: "Executive Summary"
+    key: "executive_summary"
+    source: "ai_narrative"
+    description: "High-level overview of policy analysis findings, overall maturity score, key strengths, critical gaps, and top-priority recommendations."
+
+  - number: 3
+    title: "Policy Declarations"
+    key: "policy_overview"
+    source: "metadata"
+    description: "Policy number, carrier, named insured, effective/expiration dates, aggregate limit, per-occurrence limit, deductible, premium, retroactive date."
+
+  - number: 4
+    title: "Premium Structure Breakdown"
+    key: "premium_structure"
+    source: "ai_narrative"
+    description: "Analysis of premium allocation across coverages, rate adequacy assessment, and cost per unit of coverage."
+
+  - number: 5
+    title: "Comprehensive Coverage Table"
+    key: "coverage_scoring_matrix"
+    source: "scores"
+    description: "Master table showing all coverage types with maturity scores (1-10), ratings, limits, sublimits, and key findings."
+
+  - number: 6
+    title: "Schedule of Forms & Endorsements"
+    key: "forms_endorsements"
+    source: "ai_narrative"
+    description: "Listing of all policy forms and endorsements with impact assessment."
+
+  - number: 7
+    title: "Exclusion Analysis"
+    key: "exclusion_analysis"
+    source: "ai_narrative"
+    description: "Detailed analysis of all exclusions, their impact on coverage, available carve-backs, and red flag identification."
+
+  - number: 8
+    title: "Key Definitions Analysis"
+    key: "definitions_analysis"
+    source: "ai_narrative"
+    description: "Evaluation of critical policy definitions and their favorability to the insured."
+
+  - number: 9
+    title: "Critical Policy Features"
+    key: "policy_terms_analysis"
+    source: "ai_narrative"
+    description: "Analysis of claims-made provisions, defense costs, consent clauses, hammer clauses, ERP, panel requirements."
+
+  - number: 10
+    title: "Coverage Gap Analysis"
+    key: "gap_analysis"
+    source: "ai_narrative"
+    description: "Identification and severity ranking of all coverage gaps: Critical, Major, Moderate, Minor."
+
+  - number: 11
+    title: "Risk Quantification & Scenario Analysis"
+    key: "scenario_analysis"
+    source: "ai_narrative"
+    description: "Financial modeling of 4 key scenarios: ransomware attack, data breach, BEC/social engineering, dependent BI."
+
+  - number: 12
+    title: "Benchmarking Analysis"
+    key: "benchmarking_analysis"
+    source: "ai_narrative"
+    description: "Premium benchmarking, coverage benchmarking against industry peers, limit adequacy by company size."
+
+  - number: 13
+    title: "Industry-Specific Considerations"
+    key: "msp_specific_analysis"
+    source: "ai_narrative"
+    description: "MSP/technology, healthcare, financial services, or public entity specific analysis as applicable."
+
+  - number: 14
+    title: "Compliance & Regulatory Considerations"
+    key: "regulatory_compliance"
+    source: "ai_narrative"
+    description: "GDPR, CCPA, HIPAA, GLBA, PCI-DSS, BIPA, and state privacy law coverage alignment analysis."
+
+  - number: 15
+    title: "Recommendations & Implementation Roadmap"
+    key: "recommendations"
+    source: "ai_narrative"
+    description: "Prioritized improvements: immediate (0-30 days), short-term (30-90 days), long-term (90+ days)."
+
+  - number: 16
+    title: "Cost-Benefit Analysis"
+    key: "cost_benefit"
+    source: "ai_narrative"
+    description: "ROI analysis for recommended coverage enhancements and premium optimization opportunities."
+
+  - number: 17
+    title: "Policy Terms & Conditions Review"
+    key: "terms_conditions"
+    source: "ai_narrative"
+    description: "Favorable terms, concerning terms, and recommended negotiations."
+
+  - number: 18
+    title: "Risk Management Recommendations"
+    key: "risk_management"
+    source: "ai_narrative"
+    description: "Technical and administrative control recommendations that impact insurance coverage and pricing."
+
+  - number: 19
+    title: "Carrier Evaluation"
+    key: "carrier_evaluation"
+    source: "ai_narrative"
+    description: "Financial strength ratings, cyber market experience, claims handling reputation."
+
+  - number: 20
+    title: "Appendices"
+    key: "appendices"
+    source: "ai_narrative"
+    description: "Technical glossary, carrier ratings scale, maturity scoring criteria reference."
+
+  - number: 21
+    title: "Document Control"
+    key: "document_control"
+    source: "metadata"
+    description: "Version history, document information, distribution list, confidentiality notice."

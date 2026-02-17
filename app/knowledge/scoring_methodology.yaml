@@ -1,0 +1,83 @@
+# RhôneRisk Cyber Insurance Policy Analysis - Scoring Methodology
+# Machine-readable version for deterministic post-processing
+
+scoring_scale:
+  superior:
+    range: [9, 10]
+    label: "Superior"
+    description: "Best-in-class coverage that exceeds industry standards. Highly favorable terms with minimal restrictive exclusions."
+  average:
+    range: [5, 8]
+    label: "Average"
+    description: "Standard market terms providing solid baseline of protection. Adequate for most common risks but may lack enhancements."
+  basic:
+    range: [2, 4]
+    label: "Basic"
+    description: "Coverage has significant limitations, unfavorable terms, or critical gaps. May not respond as expected in common loss scenarios."
+  no_coverage:
+    range: [0, 1]
+    label: "No Coverage"
+    description: "Risk is explicitly excluded or not mentioned, leaving the insured fully exposed."
+
+overall_score_weights:
+  coverage_adequacy: 0.40
+  limit_sufficiency: 0.25
+  exclusion_analysis: 0.20
+  policy_terms: 0.15
+
+scoring_factors:
+  - name: "Limit Amount"
+    key: "limit_adequacy"
+    description: "Is the limit adequate for the insured's risk profile?"
+  - name: "Sublimit Restrictions"
+    key: "sublimit_analysis"
+    description: "Are there restrictive sublimits that effectively reduce coverage?"
+  - name: "Deductible/Retention"
+    key: "deductible_reasonableness"
+    description: "Is the deductible/retention reasonable for the insured's size?"
+  - name: "Coverage Trigger"
+    key: "trigger_mechanism"
+    description: "How broad or narrow is the coverage trigger?"
+  - name: "Defense Costs"
+    key: "defense_costs"
+    description: "Are defense costs inside or outside limits?"
+  - name: "Payment Basis"
+    key: "payment_basis"
+    description: "Pay on behalf (favorable) vs. reimbursement?"
+  - name: "Prior Acts Coverage"
+    key: "prior_acts"
+    description: "Full, limited, or no prior acts coverage?"
+  - name: "Waiting Periods"
+    key: "waiting_period"
+    description: "For time-element coverages, is the waiting period reasonable?"
+  - name: "Special Conditions"
+    key: "special_conditions"
+    description: "Panel requirements, consent provisions, cooperation clauses?"
+  - name: "Exclusions & Carve-backs"
+    key: "exclusion_scope"
+    description: "What is excluded, and are there favorable carve-backs?"
+
+binding_recommendations:
+  recommend_binding:
+    overall_score_min: 7.0
+    red_flag_max: 0
+    description: "Policy meets or exceeds standards. Recommend binding as-is."
+  bind_with_conditions:
+    overall_score_min: 5.0
+    red_flag_max: 3
+    description: "Policy is adequate but has areas needing negotiation before or after binding."
+  require_major_modifications:
+    overall_score_min: 3.0
+    red_flag_max: 6
+    description: "Policy has significant gaps. Requires substantial modifications before binding."
+  recommend_decline:
+    overall_score_min: 0.0
+    description: "Policy is fundamentally inadequate. Recommend declining and seeking alternatives."
+
+msp_emphasis_coverages:
+  - "Technology E&O"
+  - "Contingent Business Interruption"
+  - "Dependent Business Interruption"
+  - "Contractual Liability"
+  - "Social Engineering Fraud"
+  - "Third-Party System Coverage"

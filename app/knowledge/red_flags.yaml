@@ -1,0 +1,128 @@
+# RhôneRisk Red Flag Rules
+# Automatic scoring penalties for critical policy issues
+# Red flag presence prevents "Superior" rating regardless of other factors
+
+red_flags:
+  - id: "war_exclusion"
+    name: "War/Terrorism Exclusion Without Buyback"
+    description: "Policy excludes war/terrorism/hostile acts without a carve-back or buyback option for cyber terrorism."
+    severity: "critical"
+    max_score_cap: 6
+    affected_coverages: ["all"]
+    detection_keywords:
+      - "war exclusion"
+      - "hostile act"
+      - "terrorism exclusion"
+      - "act of war"
+    mitigation: "Negotiate war exclusion buyback endorsement or cyber terrorism carve-back."
+
+  - id: "nation_state"
+    name: "Nation-State Attack Exclusion"
+    description: "Policy excludes attacks attributed to or sponsored by nation-state actors."
+    severity: "critical"
+    max_score_cap: 5
+    affected_coverages: ["all"]
+    detection_keywords:
+      - "nation-state"
+      - "state-sponsored"
+      - "government-backed"
+      - "foreign government"
+    mitigation: "Seek narrower attribution standard or affirmative nation-state coverage."
+
+  - id: "unencrypted_data"
+    name: "Absolute Unencrypted Data Exclusion"
+    description: "Policy contains an absolute exclusion for breaches involving unencrypted data with no reasonable exception."
+    severity: "critical"
+    max_score_cap: 6
+    affected_coverages: ["privacy_liability", "incident_response", "regulatory_defense"]
+    detection_keywords:
+      - "unencrypted"
+      - "encryption exclusion"
+      - "failure to encrypt"
+    mitigation: "Negotiate removal or add reasonable encryption standard exceptions."
+
+  - id: "ransomware_carveout"
+    name: "Ransomware Carve-Out"
+    description: "Policy carves out or significantly restricts ransomware coverage."
+    severity: "critical"
+    max_score_cap: 5
+    affected_coverages: ["cyber_extortion", "bi_cyber", "data_recovery"]
+    detection_keywords:
+      - "ransomware exclusion"
+      - "ransomware sublimit"
+      - "extortion exclusion"
+    mitigation: "Seek full ransomware coverage or negotiate sublimit increase."
+
+  - id: "bi_waiting_period"
+    name: "Business Interruption Waiting Period >24 Hours"
+    description: "Business interruption waiting period exceeds 24 hours, creating significant gap in coverage."
+    severity: "major"
+    max_score_cap: 6
+    affected_coverages: ["bi_cyber", "bi_system_failure", "dependent_bi"]
+    detection_keywords:
+      - "waiting period"
+      - "hours"
+      - "retention period"
+    mitigation: "Negotiate waiting period reduction to 8-12 hours."
+
+  - id: "social_engineering_sublimit"
+    name: "Social Engineering Sublimit <20% of Aggregate"
+    description: "Social engineering coverage sublimit is less than 20% of the policy aggregate, inadequate for common BEC losses."
+    severity: "major"
+    max_score_cap: 6
+    affected_coverages: ["social_engineering", "funds_transfer"]
+    detection_keywords:
+      - "social engineering"
+      - "sublimit"
+      - "fraudulent instruction"
+    mitigation: "Negotiate increased social engineering sublimit to minimum 20% of aggregate."
+
+  - id: "missing_prior_acts"
+    name: "Missing Prior Acts Coverage"
+    description: "Policy does not provide prior acts coverage (retroactive date is same as inception date)."
+    severity: "major"
+    max_score_cap: 6
+    affected_coverages: ["all"]
+    detection_keywords:
+      - "retroactive date"
+      - "prior acts"
+      - "inception date"
+    mitigation: "Negotiate full prior acts coverage or the earliest available retroactive date."
+
+  - id: "bipa_exclusion"
+    name: "BIPA Exclusion"
+    description: "Policy excludes coverage for Illinois Biometric Information Privacy Act claims."
+    severity: "major"
+    max_score_cap: 7
+    affected_coverages: ["privacy_liability", "regulatory_defense"]
+    detection_keywords:
+      - "biometric"
+      - "BIPA"
+      - "biometric information"
+    mitigation: "Negotiate BIPA exclusion removal, particularly for Illinois operations."
+
+  - id: "systemic_event"
+    name: "Widespread/Systemic Event Exclusion"
+    description: "Policy excludes coverage for widespread or systemic cyber events affecting multiple organizations."
+    severity: "critical"
+    max_score_cap: 5
+    affected_coverages: ["all"]
+    detection_keywords:
+      - "systemic"
+      - "widespread event"
+      - "infrastructure failure"
+      - "catastrophic"
+    mitigation: "Negotiate narrower systemic event definition or aggregate sublimit for systemic events."
+
+  - id: "professional_services_exclusion"
+    name: "Professional Services Exclusion (MSP Risk)"
+    description: "Policy excludes professional services liability, critical gap for MSPs and technology companies."
+    severity: "critical"
+    max_score_cap: 4
+    affected_coverages: ["technology_eo", "network_security_liability"]
+    detection_keywords:
+      - "professional services exclusion"
+      - "technology services"
+      - "managed services"
+    mitigation: "Add Technology E&O endorsement or obtain separate professional liability policy."
+    msp_specific: true
