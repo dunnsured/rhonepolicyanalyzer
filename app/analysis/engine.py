@@ -4,6 +4,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Callable, Optional
 
 from app.analysis.client import ClaudeClient
 from app.analysis.prompts import (
@@ -24,6 +25,9 @@ from app.report.generator import generate_pdf_report
 
 logger = logging.getLogger(__name__)
 
+# Type alias for progress callback: (status: str, progress: int) -> None
+ProgressCallback = Callable[[str, int], None]
+
 
 class AnalysisEngine:
     """Orchestrates the end-to-end policy analysis pipeline."""
@@ -36,6 +40,7 @@ class AnalysisEngine:
         pdf_path: Path,
         client_info: ClientInfo | None = None,
         output_dir: Path | None = None,
+        progress_callback: Optional[ProgressCallback] = None,
     ) -> PolicyAnalysis:
         """Run the complete analysis pipeline on a policy PDF.
 
@@ -51,6 +56,8 @@ class AnalysisEngine:
             pdf_path: Path to the policy PDF file.
             client_info: Optional client metadata.
             output_dir: Directory for generated report PDF. Defaults to temp dir.
+            progress_callback: Optional callback invoked at each pipeline stage
+                with (status_string, progress_percentage).
 
         Returns:
             Complete PolicyAnalysis with scores, narrative, and report path.
@@ -58,29 +65,42 @@ class AnalysisEngine:
         analysis_id = uuid.uuid4().hex[:12]
         client_info = client_info or ClientInfo()
 
+        def _report_progress(status: str, progress: int) -> None:
+            """Report progress via callback if provided."""
+            if progress_callback:
+                try:
+                    progress_callback(status, progress)
+                except Exception as e:
+                    logger.warning("Progress callback failed: %s", e)
+
         logger.info("Starting analysis %s for %s", analysis_id, pdf_path.name)
 
         # Step 1: EXTRACT
         logger.info("[%s] Step 1: Extracting PDF", analysis_id)
+        _report_progress("extracting", 15)
         md_text, tables = extract_policy(pdf_path)
         tables_text = format_tables_for_context(tables)
         logger.info("[%s] Extracted %d chars, %d tables", analysis_id, len(md_text), len(tables))
 
         # Step 2: PARSE
         logger.info("[%s] Step 2: Parsing metadata", analysis_id)
+        _report_progress("parsing", 25)
         metadata = parse_metadata(md_text)
         metadata_context = format_metadata_context(metadata)
 
         # Step 3: ANALYZE - Call 1 (Coverage Scoring)
         logger.info("[%s] Step 3: Scoring coverages (API Call 1)", analysis_id)
+        _report_progress("scoring", 35)
         coverage_scores = self.claude.score_coverages(
             policy_text=md_text,
             tables_text=tables_text,
             metadata_context=metadata_context,
         )
+        _report_progress("scoring", 50)
 
         # Step 4: POST-PROCESS
         logger.info("[%s] Step 4: Post-processing scores", analysis_id)
+        _report_progress("post_processing", 60)
         coverage_scores = apply_red_flag_penalties(coverage_scores)
         overall_score, overall_rating = calculate_overall_score(coverage_scores)
 
@@ -99,6 +119,7 @@ class AnalysisEngine:
 
         # Step 5: ANALYZE - Call 2 (Report Narrative)
         logger.info("[%s] Step 5: Generating report narrative (API Call 2)", analysis_id)
+        _report_progress("generating_narrative", 70)
         client_context = format_client_context(client_info)
         scores_context = format_scores_context(coverage_scores)
 
@@ -109,9 +130,11 @@ class AnalysisEngine:
             scores_context=scores_context,
             client_context=client_context,
         )
+        _report_progress("generating_narrative", 80)
 
         # Step 6: GENERATE PDF Report
         logger.info("[%s] Step 6: Generating PDF report", analysis_id)
+        _report_progress("generating_report", 90)
         analysis = PolicyAnalysis(
             analysis_id=analysis_id,
             status="completed",
@@ -139,5 +162,7 @@ class AnalysisEngine:
 
         generate_pdf_report(analysis, pdf_path_out)
         logger.info("[%s] Analysis complete. Report: %s", analysis_id, pdf_path_out)
+
+        _report_progress("completed", 100)
 
         return analysis

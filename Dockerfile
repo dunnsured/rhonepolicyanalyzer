@@ -29,6 +29,8 @@ RUN mkdir -p /tmp/rhone-analyzer
 RUN useradd -m appuser && chown -R appuser:appuser /app /tmp/rhone-analyzer
 USER appuser
 
-EXPOSE 8000
+# Cloud Run uses PORT environment variable (defaults to 8000)
+ENV PORT=8000
+EXPOSE ${PORT}
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
