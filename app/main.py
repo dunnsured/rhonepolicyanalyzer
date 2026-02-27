@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.analysis.engine import AnalysisEngine
 from app.config import get_settings
@@ -189,6 +190,12 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# ---------------------------------------------------------------------------
+# Static files & frontend
+# ---------------------------------------------------------------------------
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +389,6 @@ async def download_report(analysis_id: str):
 
     # Fallback to local file
     if analysis_id in _report_paths:
-        from fastapi.responses import FileResponse
         report_path = _report_paths[analysis_id]
         if report_path.exists():
             return FileResponse(
@@ -403,3 +409,13 @@ async def download_report(analysis_id: str):
             raise HTTPException(status_code=500, detail=f"Analysis failed: {status.error}")
 
     raise HTTPException(status_code=404, detail="Report not found.")
+
+
+# ---------------------------------------------------------------------------
+# Frontend catch-all (must be last)
+# ---------------------------------------------------------------------------
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve the SPA index.html for all non-API routes."""
+    return FileResponse(str(_STATIC_DIR / "index.html"), media_type="text/html")

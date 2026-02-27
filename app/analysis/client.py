@@ -153,7 +153,15 @@ class ClaudeClient:
         tool_choice: dict,
         max_retries: int = 3,
     ) -> anthropic.types.Message:
-        """Make an API call with exponential backoff retry."""
+        """Make an API call with exponential backoff retry.
+
+        Extended thinking is incompatible with forced tool_choice in the
+        Anthropic API, and also causes long timeouts on large inputs.
+        We therefore disable thinking for tool-use calls and rely on the
+        model's native reasoning ability, which is more than sufficient
+        for structured policy analysis.  Forced tool_choice guarantees
+        the model returns structured output via the specified tool.
+        """
         for attempt in range(max_retries):
             try:
                 response = self.client.messages.create(
@@ -163,11 +171,6 @@ class ClaudeClient:
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                    temperature=1,  # Required when using extended thinking
-                    thinking={
-                        "type": "enabled",
-                        "budget_tokens": self.thinking_budget,
-                    },
                 )
                 logger.info(
                     "API call succeeded: %d input tokens, %d output tokens",
@@ -179,6 +182,13 @@ class ClaudeClient:
                 wait = 2 ** attempt * 5
                 logger.warning("Rate limited, waiting %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
                 time.sleep(wait)
+            except anthropic.APIConnectionError:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt * 3
+                    logger.warning("Connection error, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                    time.sleep(wait)
+                else:
+                    raise
             except anthropic.APIStatusError as e:
                 if e.status_code >= 500 and attempt < max_retries - 1:
                     wait = 2 ** attempt * 2
