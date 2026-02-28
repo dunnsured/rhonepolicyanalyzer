@@ -1,4 +1,4 @@
-"""Anthropic Claude API client with prompt caching, structured outputs, and retries."""
+"""Anthropic Claude API client with streaming, structured outputs, and retries."""
 
 import json
 import logging
@@ -7,6 +7,7 @@ import traceback
 from pathlib import Path
 
 import anthropic
+import httpx
 
 from app.config import get_settings
 from app.models.scoring import CoverageScore, ReportSections
@@ -127,14 +128,20 @@ REPORT_NARRATIVE_TOOL = {
 
 
 class ClaudeClient:
-    """Wrapper around the Anthropic SDK with caching, retries, and structured outputs."""
+    """Wrapper around the Anthropic SDK with streaming, retries, and structured outputs.
+
+    Uses streaming API calls to avoid connection timeouts on long-running requests.
+    The sandbox environment has a ~120s connection timeout that kills non-streaming calls.
+    """
 
     def __init__(self):
         settings = get_settings()
-        self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self.client = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key,
+            max_retries=0,  # We handle retries ourselves for better logging
+        )
         self.model = settings.claude_model
         self.max_tokens = settings.claude_max_tokens
-        self.thinking_budget = settings.claude_thinking_budget
         self._system_prompt: str | None = None
 
     @property
@@ -145,33 +152,41 @@ class ClaudeClient:
             logger.info("Loaded system prompt: %d chars", len(self._system_prompt))
         return self._system_prompt
 
-    def _call_with_retry(
+    def _stream_with_retry(
         self,
         *,
         system: list[dict],
         messages: list[dict],
         tools: list[dict],
         tool_choice: dict,
+        max_tokens: int | None = None,
         max_retries: int = 3,
     ) -> tuple[anthropic.types.Message, dict]:
-        """Make an API call with exponential backoff retry.
+        """Make a streaming API call with exponential backoff retry.
 
-        Returns a tuple of (response, usage_dict) where usage_dict contains
-        input_tokens, output_tokens, and duration_seconds.
+        Uses streaming to keep the connection alive and avoid proxy timeouts.
+        Returns a tuple of (response, usage_dict).
         """
+        tokens = max_tokens or self.max_tokens
+        last_error = None
+
         for attempt in range(max_retries):
             call_start = time.time()
             try:
-                logger.info("Claude API call attempt %d/%d (model=%s, max_tokens=%d)",
-                            attempt + 1, max_retries, self.model, self.max_tokens)
-                response = self.client.messages.create(
+                logger.info(
+                    "Claude API streaming call attempt %d/%d (model=%s, max_tokens=%d)",
+                    attempt + 1, max_retries, self.model, tokens,
+                )
+                with self.client.messages.stream(
                     model=self.model,
-                    max_tokens=self.max_tokens,
+                    max_tokens=tokens,
                     system=system,
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                )
+                ) as stream:
+                    response = stream.get_final_message()
+
                 call_duration = time.time() - call_start
                 usage = {
                     "input_tokens": response.usage.input_tokens,
@@ -179,65 +194,111 @@ class ClaudeClient:
                     "duration_seconds": round(call_duration, 2),
                 }
                 logger.info(
-                    "API call succeeded in %.1fs: %d input tokens, %d output tokens",
+                    "API call succeeded in %.1fs: %d input tokens, %d output tokens, stop_reason=%s",
                     call_duration,
                     response.usage.input_tokens,
                     response.usage.output_tokens,
+                    response.stop_reason,
                 )
                 return response, usage
-            except anthropic.RateLimitError as e:
-                call_duration = time.time() - call_start
-                wait = 2 ** attempt * 5
-                logger.warning("Rate limited after %.1fs, waiting %ds (attempt %d/%d): %s",
-                               call_duration, wait, attempt + 1, max_retries, e)
-                time.sleep(wait)
+
             except anthropic.APIConnectionError as e:
                 call_duration = time.time() - call_start
+                last_error = e
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt * 3
-                    logger.warning("Connection error after %.1fs, retrying in %ds (attempt %d/%d): %s",
-                                   call_duration, wait, attempt + 1, max_retries, e)
+                    wait = 2 ** attempt * 5
+                    logger.warning(
+                        "Connection error after %.1fs, retrying in %ds (attempt %d/%d): %s",
+                        call_duration, wait, attempt + 1, max_retries, e,
+                    )
                     time.sleep(wait)
                 else:
-                    logger.error("Connection error after %.1fs, all retries exhausted: %s\n%s",
-                                 call_duration, e, traceback.format_exc())
-                    raise
+                    logger.error(
+                        "Connection error after %.1fs, all retries exhausted: %s\n%s",
+                        call_duration, e, traceback.format_exc(),
+                    )
+
+            except anthropic.RateLimitError as e:
+                call_duration = time.time() - call_start
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt * 10
+                    logger.warning(
+                        "Rate limited after %.1fs, waiting %ds (attempt %d/%d): %s",
+                        call_duration, wait, attempt + 1, max_retries, e,
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error("Rate limited, all retries exhausted: %s", e)
+
             except anthropic.APIStatusError as e:
                 call_duration = time.time() - call_start
-                if e.status_code >= 500 and attempt < max_retries - 1:
-                    wait = 2 ** attempt * 2
-                    logger.warning("Server error %d after %.1fs, retrying in %ds: %s",
-                                   e.status_code, call_duration, wait, e)
+                last_error = e
+                if (e.status_code >= 500 or e.status_code == 529) and attempt < max_retries - 1:
+                    wait = 2 ** attempt * 10
+                    logger.warning(
+                        "Server error %d after %.1fs, retrying in %ds (attempt %d/%d): %s",
+                        e.status_code, call_duration, wait, attempt + 1, max_retries, e,
+                    )
                     time.sleep(wait)
                 else:
-                    logger.error("API error %d after %.1fs: %s\n%s",
-                                 e.status_code, call_duration, e, traceback.format_exc())
+                    logger.error(
+                        "API error %d after %.1fs: %s\n%s",
+                        e.status_code, call_duration, e, traceback.format_exc(),
+                    )
                     raise
-        raise RuntimeError("Max retries exceeded for Claude API call")
+
+            except anthropic.APITimeoutError as e:
+                call_duration = time.time() - call_start
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt * 5
+                    logger.warning(
+                        "Timeout after %.1fs, retrying in %ds (attempt %d/%d): %s",
+                        call_duration, wait, attempt + 1, max_retries, e,
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error(
+                        "Timeout after %.1fs, all retries exhausted: %s",
+                        call_duration, e,
+                    )
+
+            except Exception as e:
+                call_duration = time.time() - call_start
+                last_error = e
+                logger.error(
+                    "Unexpected error after %.1fs (attempt %d/%d): %s\n%s",
+                    call_duration, attempt + 1, max_retries, e, traceback.format_exc(),
+                )
+                if attempt >= max_retries - 1:
+                    raise
+
+        raise RuntimeError(f"Max retries ({max_retries}) exceeded for Claude API call. Last error: {last_error}")
 
     def _extract_tool_input(self, response: anthropic.types.Message) -> dict:
         """Extract the tool use input from a response."""
         for block in response.content:
             if block.type == "tool_use":
                 return block.input
-        raise ValueError("No tool_use block found in response")
+        # Log what we got instead
+        content_types = [block.type for block in response.content]
+        logger.error("No tool_use block found. Got content types: %s, stop_reason: %s",
+                      content_types, response.stop_reason)
+        if response.content and response.content[0].type == "text":
+            logger.error("Text content: %s", response.content[0].text[:500])
+        raise ValueError(f"No tool_use block found in response. Content types: {content_types}")
 
     def score_coverages(self, policy_text: str, tables_text: str,
                         metadata_context: str) -> tuple[list[CoverageScore], dict]:
-        """Call 1: Score all coverage types in a single API call.
+        """Call 1: Score all coverage types in a single streaming API call.
 
         Returns:
             Tuple of (list of CoverageScore objects, usage dict with token counts and duration).
         """
-        logger.info("Starting coverage scoring (Call 1)")
+        logger.info("Starting coverage scoring (Call 1) — using streaming")
 
-        system = [
-            {
-                "type": "text",
-                "text": self.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ]
+        system = [{"type": "text", "text": self.system_prompt}]
 
         user_message = f"""Analyze the following cyber insurance policy and score ALL coverage types using the RhôneRisk 4-Tier Maturity Scoring System.
 
@@ -261,16 +322,19 @@ Use the submit_coverage_scores tool to return your complete analysis."""
 
         messages = [{"role": "user", "content": user_message}]
 
-        response, usage = self._call_with_retry(
+        logger.info("Scoring call — system: %d chars, user: %d chars", len(self.system_prompt), len(user_message))
+
+        response, usage = self._stream_with_retry(
             system=system,
             messages=messages,
             tools=[COVERAGE_SCORES_TOOL],
             tool_choice={"type": "tool", "name": "submit_coverage_scores"},
+            max_tokens=16384,
         )
 
         result = self._extract_tool_input(response)
         scores = [CoverageScore(**s) for s in result["coverage_scores"]]
-        logger.info("Scored %d coverage types", len(scores))
+        logger.info("Scored %d coverage types in %.1fs", len(scores), usage["duration_seconds"])
         return scores, usage
 
     def generate_report_narrative(
@@ -281,20 +345,14 @@ Use the submit_coverage_scores tool to return your complete analysis."""
         scores_context: str,
         client_context: str,
     ) -> tuple[ReportSections, dict]:
-        """Call 2: Generate narrative content for all 21 report sections.
+        """Call 2: Generate narrative content for all report sections via streaming.
 
         Returns:
             Tuple of (ReportSections, usage dict with token counts and duration).
         """
-        logger.info("Starting report narrative generation (Call 2)")
+        logger.info("Starting report narrative generation (Call 2) — using streaming")
 
-        system = [
-            {
-                "type": "text",
-                "text": self.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ]
+        system = [{"type": "text", "text": self.system_prompt}]
 
         user_message = f"""Generate the complete narrative content for a RhôneRisk 21-section cyber insurance policy analysis report.
 
@@ -328,14 +386,18 @@ Use the submit_report_narrative tool to return all section content."""
 
         messages = [{"role": "user", "content": user_message}]
 
-        response, usage = self._call_with_retry(
+        logger.info("Narrative call — system: %d chars, user: %d chars", len(self.system_prompt), len(user_message))
+
+        response, usage = self._stream_with_retry(
             system=system,
             messages=messages,
             tools=[REPORT_NARRATIVE_TOOL],
             tool_choice={"type": "tool", "name": "submit_report_narrative"},
+            max_tokens=16384,
         )
 
         result = self._extract_tool_input(response)
         sections = ReportSections(**result)
-        logger.info("Generated report narrative for %d sections", sum(1 for v in result.values() if v))
+        logger.info("Generated report narrative for %d sections in %.1fs",
+                     sum(1 for v in result.values() if v), usage["duration_seconds"])
         return sections, usage
