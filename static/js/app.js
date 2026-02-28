@@ -5,7 +5,11 @@
 (function () {
   'use strict';
 
-  // ---- State ------------------------------------------------
+  // ---- Auth State --------------------------------------------
+  let authToken = null;
+  let currentUser = null;
+
+  // ---- App State ---------------------------------------------
   let currentView = 'home';
   let selectedFile = null;
   let analysisId = null;
@@ -15,6 +19,7 @@
   let progressSSE = null;
   let monitorSSE = null;
 
+  const SUPABASE_URL = ''; // Will be loaded from /api/v1/auth/config
   const STAGE_LABELS = {
     pending:              'Pending',
     extracting:           'Extracting Text',
@@ -32,7 +37,6 @@
     'post_processing', 'generating_narrative', 'generating_report',
   ];
 
-  // Timing thresholds (seconds) for color coding
   const TIMING_THRESHOLDS = {
     extracting:           { green: 10, yellow: 30 },
     parsing:              { green: 10, yellow: 30 },
@@ -47,8 +51,241 @@
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
   const $$ = (sel, ctx) => [...(ctx || document).querySelectorAll(sel)];
 
+  // ---- Auth helpers -----------------------------------------
+  function getStoredSession() {
+    try {
+      const s = localStorage.getItem('rhone_session');
+      return s ? JSON.parse(s) : null;
+    } catch { return null; }
+  }
+
+  function storeSession(session) {
+    if (session) {
+      localStorage.setItem('rhone_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('rhone_session');
+    }
+  }
+
+  function authHeaders() {
+    const h = { 'Authorization': `Bearer ${authToken}` };
+    return h;
+  }
+
+  function authFetch(url, opts = {}) {
+    if (!opts.headers) opts.headers = {};
+    if (authToken) {
+      opts.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return fetch(url, opts);
+  }
+
+  function updateAuthUI() {
+    const authBtns = $('#nav-auth-buttons');
+    const userMenu = $('#nav-user-menu');
+    const authOnlyEls = $$('.auth-only');
+
+    if (currentUser && authToken) {
+      authBtns.style.display = 'none';
+      userMenu.style.display = 'flex';
+      const name = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || 'User';
+      $('#nav-user-name').textContent = name;
+      $('#nav-user-email').textContent = currentUser.email || '';
+      $('#user-avatar').textContent = (name[0] || 'U').toUpperCase();
+      authOnlyEls.forEach(el => el.style.display = '');
+    } else {
+      authBtns.style.display = 'flex';
+      userMenu.style.display = 'none';
+      authOnlyEls.forEach(el => el.style.display = 'none');
+    }
+  }
+
+  async function initAuth() {
+    const session = getStoredSession();
+    if (session && session.access_token) {
+      // Validate the token with the backend
+      try {
+        const res = await fetch('/api/v1/auth/me', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          authToken = session.access_token;
+          currentUser = data.user || data;
+          storeSession(session);
+          updateAuthUI();
+          return true;
+        } else {
+          // Try refresh
+          if (session.refresh_token) {
+            const refreshed = await refreshSession(session.refresh_token);
+            if (refreshed) {
+              updateAuthUI();
+              return true;
+            }
+          }
+          // Token invalid
+          storeSession(null);
+          authToken = null;
+          currentUser = null;
+          updateAuthUI();
+          return false;
+        }
+      } catch {
+        storeSession(null);
+        authToken = null;
+        currentUser = null;
+        updateAuthUI();
+        return false;
+      }
+    }
+    updateAuthUI();
+    return false;
+  }
+
+  async function refreshSession(refreshToken) {
+    try {
+      const res = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        authToken = data.access_token;
+        currentUser = data.user;
+        storeSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          user: data.user,
+        });
+        return true;
+      }
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    const email = $('#login-email').value.trim();
+    const password = $('#login-password').value;
+    const errorEl = $('#login-error');
+    const btn = $('#login-btn');
+
+    errorEl.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner spinner-gold"></span> Signing in…';
+
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Login failed');
+      }
+      authToken = data.access_token;
+      currentUser = data.user;
+      storeSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user,
+      });
+      updateAuthUI();
+      toast('Signed in successfully!');
+      navigate('home');
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Sign In';
+    }
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    const name = $('#register-name').value.trim();
+    const email = $('#register-email').value.trim();
+    const password = $('#register-password').value;
+    const confirm = $('#register-confirm').value;
+    const errorEl = $('#register-error');
+    const successEl = $('#register-success');
+    const btn = $('#register-btn');
+
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    if (password !== confirm) {
+      errorEl.textContent = 'Passwords do not match.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner spinner-gold"></span> Creating account…';
+
+    try {
+      const res = await fetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, display_name: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Registration failed');
+      }
+
+      if (data.access_token) {
+        // Auto-confirmed — log in directly
+        authToken = data.access_token;
+        currentUser = data.user;
+        storeSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          user: data.user,
+        });
+        updateAuthUI();
+        toast('Account created! Welcome to RhôneRisk.');
+        navigate('home');
+      } else {
+        // Email confirmation required
+        successEl.innerHTML = 'Account created! Please check your email to confirm your account, then <a href="#login" data-view="login">sign in</a>.';
+        successEl.style.display = 'block';
+        // Attach click handler to the link
+        const link = successEl.querySelector('a');
+        if (link) link.addEventListener('click', (ev) => { ev.preventDefault(); navigate('login'); });
+      }
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Create Account';
+    }
+  }
+
+  function handleLogout() {
+    authToken = null;
+    currentUser = null;
+    storeSession(null);
+    updateAuthUI();
+    toast('Signed out successfully.');
+    navigate('home');
+  }
+
   // ---- Navigation -------------------------------------------
   function navigate(view) {
+    // Auth guard: protected views require login
+    const protectedViews = ['analyze', 'progress', 'results', 'monitor'];
+    if (protectedViews.includes(view) && !authToken) {
+      toast('Please sign in to access this feature.', true);
+      navigate('login');
+      return;
+    }
+
     $$('.view').forEach(v => v.classList.remove('active'));
     const el = $(`#view-${view}`);
     if (el) el.classList.add('active');
@@ -59,9 +296,13 @@
 
     currentView = view;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    history.replaceState(null, '', view === 'home' ? '/' : `#${view}`);
 
-    // Load monitor data when navigating to monitor view
+    if (['home', 'login', 'register'].includes(view)) {
+      history.replaceState(null, '', view === 'home' ? '/' : `#${view}`);
+    } else {
+      history.replaceState(null, '', `#${view}`);
+    }
+
     if (view === 'monitor') loadMonitorData();
   }
 
@@ -110,6 +351,7 @@
     const zone = $('#dropzone');
     const input = $('#file-input');
     const info = $('#file-info');
+    if (!zone || !input) return;
 
     function showFile(file) {
       if (!file) return;
@@ -154,6 +396,7 @@
   // ---- Submit -----------------------------------------------
   async function submitAnalysis(e) {
     e.preventDefault();
+    if (!authToken) { toast('Please sign in first.', true); navigate('login'); return; }
     if (!selectedFile) { toast('Please select a PDF file first.', true); return; }
 
     const btn = $('#submit-btn');
@@ -170,9 +413,10 @@
     form.append('notes', $('#notes').value);
 
     try {
-      const res = await fetch('/api/v1/analyze', { method: 'POST', body: form });
+      const res = await authFetch('/api/v1/analyze', { method: 'POST', body: form });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 401) { handleLogout(); throw new Error('Session expired. Please sign in again.'); }
         throw new Error(err.detail || `Upload failed (${res.status})`);
       }
       const data = await res.json();
@@ -221,7 +465,9 @@
     viewer.innerHTML = '';
     dot.className = 'log-status-dot connected';
 
-    progressSSE = new EventSource(`/api/v1/analyze/${analysisId}/logs`);
+    // SSE with auth via query param (EventSource doesn't support headers)
+    const url = `/api/v1/analyze/${analysisId}/logs` + (authToken ? `?token=${encodeURIComponent(authToken)}` : '');
+    progressSSE = new EventSource(url);
     progressSSE.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -266,7 +512,8 @@
   async function pollStatus() {
     if (!analysisId) return;
     try {
-      const res = await fetch(`/api/v1/analyze/${analysisId}/status`);
+      const res = await authFetch(`/api/v1/analyze/${analysisId}/status`);
+      if (res.status === 401) { handleLogout(); return; }
       const data = await res.json();
 
       renderProgress(data.status, data.progress || 0, data.elapsed_seconds || 0);
@@ -278,272 +525,229 @@
         const el = $('#progress-elapsed');
         if (el) el.textContent = `Completed in ${formatDuration(data.elapsed_seconds || 0)}`;
         await loadResults();
+        setTimeout(() => navigate('results'), 1500);
       } else if (data.status === 'failed') {
         clearInterval(pollTimer);
         pollTimer = null;
         stopElapsedTimer();
-        renderError(data.error || 'Analysis failed unexpectedly.');
+        const errMsg = data.error || 'Analysis failed.';
+        $('#error-message').textContent = errMsg;
+        navigate('error');
       }
     } catch (err) {
-      console.error('Poll error:', err);
+      /* ignore transient errors */
     }
   }
 
   function renderProgress(status, progress, elapsed) {
-    $('#progress-pct').textContent = progress;
-    $('#progress-stage').textContent = STAGE_LABELS[status] || status;
-    $('#progress-detail').textContent = status === 'completed'
-      ? 'Analysis complete! Loading results…'
-      : 'This typically takes 1–3 minutes depending on policy length.';
-    $('#analysis-id-display').textContent = analysisId;
+    const pct = Math.round(progress);
+    const ring = $('#progress-ring-fill');
+    const pctEl = $('#progress-pct');
+    const stageEl = $('#progress-stage');
+    const detailEl = $('#progress-detail');
+    const idEl = $('#analysis-id-display');
 
-    const circumference = 2 * Math.PI * 78;
-    const offset = circumference - (progress / 100) * circumference;
-    $('#progress-ring-fill').style.strokeDasharray = circumference;
-    $('#progress-ring-fill').style.strokeDashoffset = offset;
+    if (ring) {
+      const circ = 2 * Math.PI * 78;
+      ring.style.strokeDashoffset = circ - (circ * pct / 100);
+    }
+    if (pctEl) pctEl.textContent = pct;
+    if (stageEl) stageEl.textContent = STAGE_LABELS[status] || status;
+    if (detailEl) detailEl.textContent = status === 'completed' ? 'Analysis complete!' : `Processing…`;
+    if (idEl && analysisId) idEl.textContent = analysisId;
 
-    const currentIdx = STAGE_ORDER.indexOf(status);
-    $$('.stage-step').forEach((el, i) => {
-      el.classList.remove('active', 'done');
-      if (status === 'completed') {
-        el.classList.add('done');
-      } else if (i < currentIdx) {
-        el.classList.add('done');
-      } else if (i === currentIdx) {
-        el.classList.add('active');
-      }
+    // Update step dots
+    const steps = $$('.stage-step');
+    const idx = STAGE_ORDER.indexOf(status);
+    steps.forEach((step, i) => {
+      step.classList.remove('active', 'done');
+      if (i < idx) step.classList.add('done');
+      else if (i === idx) step.classList.add('active');
     });
+    if (status === 'completed') steps.forEach(s => s.classList.add('done'));
   }
 
-  function renderError(msg) {
-    navigate('error');
-    $('#error-message').textContent = msg;
-  }
-
-  // ---- Results ----------------------------------------------
+  // ---- Load Results -----------------------------------------
   async function loadResults() {
+    if (!analysisId) return;
     try {
-      const res = await fetch(`/api/v1/analyze/${analysisId}`);
+      const res = await authFetch(`/api/v1/analyze/${analysisId}`);
+      if (res.status === 401) { handleLogout(); return; }
       if (!res.ok) throw new Error('Failed to load results');
       const data = await res.json();
       renderResults(data);
-      navigate('results');
     } catch (err) {
-      renderError(err.message);
+      toast('Failed to load analysis results.', true);
     }
-  }
-
-  function scoreColor(score) {
-    if (score >= 8) return '#059669';
-    if (score >= 6) return '#2563eb';
-    if (score >= 3) return '#d97706';
-    return '#dc2626';
-  }
-
-  function ratingClass(rating) {
-    if (!rating) return 'rating-average';
-    const r = rating.toLowerCase();
-    if (r.includes('superior')) return 'rating-superior';
-    if (r.includes('average'))  return 'rating-average';
-    if (r.includes('basic'))    return 'rating-basic';
-    return 'rating-nocoverage';
-  }
-
-  function recClass(rec) {
-    if (!rec) return 'rec-caution';
-    const r = rec.toLowerCase();
-    if (r.includes('bind') || r.includes('recommend')) return 'rec-bind';
-    if (r.includes('caution') || r.includes('conditional')) return 'rec-caution';
-    return 'rec-decline';
-  }
-
-  function recIcon(rec) {
-    if (!rec) return '⚠️';
-    const r = rec.toLowerCase();
-    if (r.includes('bind') || r.includes('recommend')) return '✅';
-    if (r.includes('caution') || r.includes('conditional')) return '⚠️';
-    return '🚫';
-  }
-
-  function tierLabel(score) {
-    if (score >= 8) return 'Superior';
-    if (score >= 5) return 'Average';
-    if (score >= 2) return 'Basic';
-    return 'No Coverage';
-  }
-
-  function tierClass(score) {
-    if (score >= 8) return 'superior';
-    if (score >= 5) return 'average';
-    if (score >= 2) return 'basic';
-    return 'nocoverage';
   }
 
   function renderResults(data) {
-    const score = data.overall_score != null ? data.overall_score : 0;
-    const color = scoreColor(score);
-    const circumference = 2 * Math.PI * 88;
-    const offset = circumference - (score / 10) * circumference;
+    // Score gauge
+    const score = data.overall_score || 0;
+    const fill = $('#gauge-fill');
+    if (fill) {
+      const circ = 2 * Math.PI * 88;
+      fill.style.strokeDashoffset = circ - (circ * score / 10);
+      fill.style.stroke = score >= 7 ? 'var(--green)' : score >= 4 ? 'var(--gold)' : 'var(--red)';
+    }
+    const scoreNum = $('#score-num');
+    if (scoreNum) scoreNum.textContent = score.toFixed(1);
 
-    $('#gauge-fill').style.strokeDasharray = circumference;
-    $('#gauge-fill').style.strokeDashoffset = offset;
-    $('#gauge-fill').style.stroke = color;
-    $('#score-num').textContent = score.toFixed(1);
-    $('#score-num').style.color = color;
-
-    const rating = data.overall_rating || 'N/A';
-    const badgeEl = $('#rating-badge');
-    badgeEl.textContent = rating;
-    badgeEl.className = `rating-badge ${ratingClass(rating)}`;
-
-    const rec = data.binding_recommendation || 'N/A';
-    const recEl = $('#recommendation');
-    recEl.className = `recommendation-card ${recClass(rec)}`;
-    recEl.innerHTML = `
-      <span class="rec-icon">${recIcon(rec)}</span>
-      <div>
-        <div style="font-size:13px;opacity:.7;margin-bottom:2px">Binding Recommendation</div>
-        <div>${rec}</div>
-        ${data.binding_rationale ? `<div style="font-size:13px;font-weight:400;margin-top:6px;opacity:.8">${data.binding_rationale}</div>` : ''}
-      </div>
-    `;
-
-    const meta = data.policy_metadata;
-    if (meta) {
-      let metaHtml = '';
-      const fields = [
-        ['Insurer', meta.insurer],
-        ['Policy Number', meta.policy_number],
-        ['Policy Period', meta.policy_period],
-        ['Named Insured', meta.named_insured],
-        ['Aggregate Limit', meta.aggregate_limit],
-        ['Retention/Deductible', meta.retention],
-      ];
-      fields.forEach(([label, val]) => {
-        if (val) metaHtml += `<div><strong>${label}:</strong> ${val}</div>`;
-      });
-      $('#policy-metadata').innerHTML = metaHtml || '<div style="color:var(--gray-400)">No metadata extracted</div>';
+    // Rating badge
+    const badge = $('#rating-badge');
+    const rating = data.overall_rating || '—';
+    if (badge) {
+      badge.textContent = rating;
+      badge.className = 'rating-badge';
+      if (rating.toLowerCase().includes('superior')) badge.classList.add('rating-superior');
+      else if (rating.toLowerCase().includes('average')) badge.classList.add('rating-average');
+      else if (rating.toLowerCase().includes('basic')) badge.classList.add('rating-basic');
+      else badge.classList.add('rating-none');
     }
 
-    const scores = data.coverage_scores;
-    const tbody = $('#coverage-tbody');
-    tbody.innerHTML = '';
-    if (scores && typeof scores === 'object') {
-      const entries = Array.isArray(scores)
-        ? scores
-        : Object.entries(scores).map(([k, v]) => {
-            if (typeof v === 'object' && v !== null) return { name: v.name || k, score: v.score ?? v.value ?? 0, ...v };
-            return { name: k, score: v };
-          });
+    // Recommendation
+    const rec = data.binding_recommendation || {};
+    const recEl = $('#recommendation');
+    if (recEl) {
+      const recText = rec.recommendation || rec || '—';
+      const rationale = rec.rationale || '';
+      let recClass = 'rec-caution';
+      let icon = '⚠️';
+      const recLower = (typeof recText === 'string' ? recText : '').toLowerCase();
+      if (recLower.includes('bind') && !recLower.includes('not') && !recLower.includes('caution') && !recLower.includes('modif')) {
+        recClass = 'rec-bind'; icon = '✅';
+      } else if (recLower.includes('decline') || recLower.includes('not recommend')) {
+        recClass = 'rec-decline'; icon = '❌';
+      }
+      recEl.className = `recommendation-card ${recClass}`;
+      recEl.innerHTML = `<span class="rec-icon">${icon}</span><div><strong>${escapeHtml(typeof recText === 'string' ? recText : JSON.stringify(recText))}</strong>${rationale ? `<p style="margin-top:8px;font-size:14px;opacity:.85">${escapeHtml(rationale)}</p>` : ''}</div>`;
+    }
 
-      entries.forEach(item => {
-        const s = typeof item.score === 'number' ? item.score : parseFloat(item.score) || 0;
+    // Policy metadata
+    const meta = data.policy_metadata || {};
+    const metaEl = $('#policy-metadata');
+    if (metaEl) {
+      const items = [
+        ['Insurer', meta.insurer],
+        ['Policy Form', meta.policy_form],
+        ['Effective', meta.effective_date],
+        ['Aggregate Limit', meta.aggregate_limit],
+        ['Retention', meta.retention],
+      ].filter(([,v]) => v);
+      metaEl.innerHTML = items.map(([k,v]) => `<span><strong>${k}:</strong> ${escapeHtml(String(v))}</span>`).join(' &nbsp;|&nbsp; ');
+    }
+
+    // Coverage scores
+    const tbody = $('#coverage-tbody');
+    if (tbody && data.coverage_scores) {
+      tbody.innerHTML = '';
+      data.coverage_scores.forEach(c => {
+        const s = c.score || 0;
+        const tier = c.tier || '—';
         const pct = (s / 10) * 100;
-        const cls = tierClass(s);
+        let color = 'var(--red)';
+        if (s >= 7) color = 'var(--green)';
+        else if (s >= 4) color = 'var(--gold)';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${item.name || item.section || item.coverage_name || '—'}</td>
-          <td class="score-cell ${cls}">${s.toFixed(1)}</td>
-          <td>${tierLabel(s)}</td>
-          <td class="score-bar-cell">
-            <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%;background:${scoreColor(s)}"></div></div>
-          </td>
+          <td>${escapeHtml(c.coverage_name || c.section_key || '—')}</td>
+          <td style="font-weight:700">${s.toFixed(1)}</td>
+          <td><span class="tier-badge tier-${tier.toLowerCase().replace(/\s/g,'-')}">${tier}</span></td>
+          <td><div class="score-bar"><div class="score-bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    const rfCount = data.red_flag_count != null ? data.red_flag_count : '—';
-    $('#red-flag-count').textContent = rfCount;
-
-    const gaps = data.critical_gaps;
-    const gapsList = $('#critical-gaps');
-    gapsList.innerHTML = '';
-    if (gaps && gaps.length) {
-      gaps.forEach(g => {
-        const text = typeof g === 'string' ? g : (g.description || g.name || JSON.stringify(g));
-        const div = document.createElement('div');
-        div.className = 'alert-box alert-red';
-        div.innerHTML = `<span class="alert-icon">⚠</span><span>${text}</span>`;
-        gapsList.appendChild(div);
-      });
-    } else {
-      gapsList.innerHTML = '<p style="color:var(--gray-400);font-size:14px">No critical gaps identified.</p>';
+    // Red flags & gaps
+    const rfEl = $('#red-flag-count');
+    if (rfEl) rfEl.textContent = data.red_flag_count || 0;
+    const gapsEl = $('#critical-gaps');
+    if (gapsEl && data.critical_gaps) {
+      gapsEl.innerHTML = data.critical_gaps.map(g => `<div class="gap-item">⚠ ${escapeHtml(g)}</div>`).join('');
     }
 
-    $('#download-btn').onclick = () => {
-      window.open(`/api/v1/analyze/${analysisId}/report`, '_blank');
-    };
+    // Download button
+    const dlBtn = $('#download-btn');
+    if (dlBtn) {
+      dlBtn.onclick = () => {
+        // Use auth token in download
+        window.open(`/api/v1/analyze/${analysisId}/report?token=${encodeURIComponent(authToken)}`, '_blank');
+      };
+    }
   }
 
-  // =========================================================
-  // MONITORING DASHBOARD
-  // =========================================================
-
+  // ---- Monitor Dashboard ------------------------------------
   async function loadMonitorData() {
+    if (!authToken) return;
     try {
-      const res = await fetch('/api/v1/analyses');
+      const res = await authFetch('/api/v1/analyses');
+      if (res.status === 401) { handleLogout(); return; }
       if (!res.ok) throw new Error('Failed to load analyses');
       const data = await res.json();
-      renderMonitorDashboard(data.analyses || []);
+      renderMonitorDashboard(data);
     } catch (err) {
-      console.error('Monitor load error:', err);
       toast('Failed to load monitoring data.', true);
     }
   }
 
   function renderMonitorDashboard(analyses) {
-    // Summary stats
-    const total = analyses.length;
-    const completed = analyses.filter(a => a.status === 'completed').length;
-    const failed = analyses.filter(a => a.status === 'failed').length;
+    const list = analyses.analyses || analyses || [];
+
+    // Stats
+    const total = list.length;
+    const completed = list.filter(a => a.status === 'completed').length;
+    const failed = list.filter(a => a.status === 'failed').length;
     const running = total - completed - failed;
-    const completedAnalyses = analyses.filter(a => a.status === 'completed' && a.total_duration_seconds > 0);
-    const avgTime = completedAnalyses.length > 0
-      ? completedAnalyses.reduce((sum, a) => sum + a.total_duration_seconds, 0) / completedAnalyses.length
+    const completedList = list.filter(a => a.status === 'completed' && a.total_duration_seconds > 0);
+    const avgTime = completedList.length > 0
+      ? completedList.reduce((s, a) => s + a.total_duration_seconds, 0) / completedList.length
       : 0;
 
-    $('#stat-total').textContent = total;
-    $('#stat-completed').textContent = completed;
-    $('#stat-failed').textContent = failed;
-    $('#stat-running').textContent = running;
-    $('#stat-avg-time').textContent = avgTime > 0 ? formatDuration(avgTime) : '—';
+    const setVal = (id, val) => { const el = $(`#${id}`); if (el) el.textContent = val; };
+    setVal('stat-total', total);
+    setVal('stat-completed', completed);
+    setVal('stat-failed', failed);
+    setVal('stat-running', running);
+    setVal('stat-avg-time', avgTime > 0 ? formatDuration(avgTime) : '—');
 
-    // History table
+    // Table
     const tbody = $('#history-tbody');
-    tbody.innerHTML = '';
     const noHistory = $('#no-history');
-
-    if (analyses.length === 0) {
-      noHistory.style.display = 'block';
+    if (!list.length) {
+      if (tbody) tbody.innerHTML = '';
+      if (noHistory) noHistory.style.display = 'block';
       return;
     }
-    noHistory.style.display = 'none';
+    if (noHistory) noHistory.style.display = 'none';
 
-    // Populate analysis selector for log viewer
-    const select = $('#log-analysis-select');
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">Select an analysis…</option>';
-    analyses.forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = a.analysis_id;
-      opt.textContent = `${a.analysis_id} — ${a.client_name || a.filename || 'Unknown'} (${a.status})`;
-      select.appendChild(opt);
-    });
-    if (currentVal) select.value = currentVal;
+    // Log selector
+    const logSelect = $('#log-analysis-select');
+    if (logSelect) {
+      const prevVal = logSelect.value;
+      logSelect.innerHTML = '<option value="">Select an analysis…</option>';
+      list.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.analysis_id;
+        opt.textContent = `${a.analysis_id} — ${a.client_name || a.filename || 'Unknown'}`;
+        logSelect.appendChild(opt);
+      });
+      if (prevVal) logSelect.value = prevVal;
+    }
 
-    analyses.forEach(a => {
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    list.forEach(a => {
       const tr = document.createElement('tr');
-      const timings = a.stage_timings || {};
-
-      function getStageTime(stage) {
-        const t = timings[stage];
-        if (!t || !t.duration_seconds) return { text: '—', cls: 'timing-na' };
+      const getStageTime = (stage) => {
+        const t = (a.stage_timings || {})[stage];
+        const dur = t ? (t.duration_seconds || 0) : 0;
         return {
-          text: formatDuration(t.duration_seconds),
-          cls: timingClass(stage, t.duration_seconds),
+          text: dur > 0 ? formatDuration(dur) : '—',
+          cls: dur > 0 ? timingClass(stage, dur) : 'timing-na',
         };
-      }
+      };
 
       const ext = getStageTime('extracting');
       const par = getStageTime('parsing');
@@ -570,13 +774,12 @@
         <td class="${rep.cls}">${rep.text}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm btn-outline detail-btn" data-id="${a.analysis_id}">View</button>
-          ${a.status === 'completed' ? `<a href="/api/v1/analyze/${a.analysis_id}/report" download class="btn btn-sm btn-primary" style="margin-left:6px;text-decoration:none" title="Download PDF report">&#8595; PDF</a>` : ''}
+          ${a.status === 'completed' ? `<a href="/api/v1/analyze/${a.analysis_id}/report?token=${encodeURIComponent(authToken)}" download class="btn btn-sm btn-primary" style="margin-left:6px;text-decoration:none" title="Download PDF report">&#8595; PDF</a>` : ''}
         </td>
       `;
       tbody.appendChild(tr);
     });
 
-    // Attach detail button handlers
     $$('.detail-btn').forEach(btn => {
       btn.addEventListener('click', () => showDetail(btn.dataset.id));
     });
@@ -589,7 +792,8 @@
   // ---- Detail Modal -----------------------------------------
   async function showDetail(id) {
     try {
-      const res = await fetch(`/api/v1/analyze/${id}/timing`);
+      const res = await authFetch(`/api/v1/analyze/${id}/timing`);
+      if (res.status === 401) { handleLogout(); return; }
       if (!res.ok) throw new Error('Failed to load details');
       const data = await res.json();
       renderDetailModal(data);
@@ -604,7 +808,6 @@
 
     let html = '';
 
-    // Basic info
     const rows = [
       ['Analysis ID', data.analysis_id],
       ['Client', data.client_name || '—'],
@@ -621,7 +824,6 @@
       html += `<div class="detail-row"><span class="detail-label">${label}</span><span class="detail-value">${value}</span></div>`;
     });
 
-    // Stage timings
     html += '<div class="detail-section"><h4>Stage Timings</h4>';
     const stages = ['extracting', 'parsing', 'scoring', 'post_processing', 'generating_narrative', 'generating_report'];
     stages.forEach(stage => {
@@ -632,7 +834,6 @@
     });
     html += '</div>';
 
-    // Token usage
     html += '<div class="detail-section"><h4>Claude API Token Usage</h4>';
     html += `<div class="detail-row"><span class="detail-label">Scoring — Input Tokens</span><span class="detail-value">${data.scoring_input_tokens ? data.scoring_input_tokens.toLocaleString() : '—'}</span></div>`;
     html += `<div class="detail-row"><span class="detail-label">Scoring — Output Tokens</span><span class="detail-value">${data.scoring_output_tokens ? data.scoring_output_tokens.toLocaleString() : '—'}</span></div>`;
@@ -642,16 +843,14 @@
     html += `<div class="detail-row"><span class="detail-label">Total Tokens</span><span class="detail-value" style="font-weight:700">${totalTokens > 0 ? totalTokens.toLocaleString() : '—'}</span></div>`;
     html += '</div>';
 
-    // Error
     if (data.error) {
       html += '<div class="detail-section"><h4>Error</h4>';
       html += `<div class="detail-error">${escapeHtml(data.error)}</div>`;
       html += '</div>';
     }
 
-    // Download PDF button for completed analyses
     if (data.status === 'completed') {
-      html += `<div style="margin-top:20px;text-align:center"><a href="/api/v1/analyze/${data.analysis_id}/report" download class="btn btn-primary" style="text-decoration:none">&#8595;&nbsp; Download PDF Report</a></div>`;
+      html += `<div style="margin-top:20px;text-align:center"><a href="/api/v1/analyze/${data.analysis_id}/report?token=${encodeURIComponent(authToken)}" download class="btn btn-primary" style="text-decoration:none">&#8595;&nbsp; Download PDF Report</a></div>`;
     }
 
     content.innerHTML = html;
@@ -668,7 +867,8 @@
     viewer.innerHTML = '';
     dot.className = 'log-status-dot connected';
 
-    monitorSSE = new EventSource(`/api/v1/analyze/${id}/logs`);
+    const url = `/api/v1/analyze/${id}/logs` + (authToken ? `?token=${encodeURIComponent(authToken)}` : '');
+    monitorSSE = new EventSource(url);
     monitorSSE.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -687,7 +887,10 @@
   }
 
   // ---- Init -------------------------------------------------
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize auth
+    await initAuth();
+
     // Navigation
     $$('[data-view]').forEach(el => {
       el.addEventListener('click', e => {
@@ -696,16 +899,30 @@
       });
     });
 
+    // Auth forms
+    const loginForm = $('#login-form');
+    if (loginForm) loginForm.addEventListener('submit', handleLogin);
+
+    const registerForm = $('#register-form');
+    if (registerForm) registerForm.addEventListener('submit', handleRegister);
+
+    const logoutBtn = $('#logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+
     // Handle hash
     const hash = location.hash.replace('#', '');
-    if (hash && $(`#view-${hash}`)) navigate(hash);
-    else navigate('home');
+    if (hash && $(`#view-${hash}`)) {
+      navigate(hash);
+    } else {
+      navigate('home');
+    }
 
     // Dropzone
     setupDropzone();
 
     // Form submit
-    $('#analyze-form').addEventListener('submit', submitAnalysis);
+    const analyzeForm = $('#analyze-form');
+    if (analyzeForm) analyzeForm.addEventListener('submit', submitAnalysis);
 
     // New analysis from results
     if ($('#new-analysis-btn')) {

@@ -96,6 +96,98 @@ img { max-width: 100%; display: block; }
 .nav-links a:hover,
 .nav-links a.active { color: var(--white); background: rgba(255,255,255,.08); }
 
+/* --- Nav Right / Auth Buttons ----------------------------- */
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-auth-buttons { display: flex; align-items: center; gap: 8px; }
+.nav-auth-buttons .btn-outline {
+  color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.2);
+}
+.nav-auth-buttons .btn-outline:hover {
+  color: var(--white); border-color: var(--gold);
+}
+.nav-user-menu {
+  display: flex; align-items: center; gap: 12px;
+}
+.user-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; color: var(--navy);
+  flex-shrink: 0;
+}
+.user-info {
+  display: flex; flex-direction: column; line-height: 1.3;
+}
+.user-name {
+  font-size: 13px; font-weight: 600; color: var(--white);
+}
+.user-email {
+  font-size: 11px; color: rgba(255,255,255,.5);
+}
+.nav-user-menu .btn-outline {
+  color: rgba(255,255,255,.7); border-color: rgba(255,255,255,.15);
+  padding: 8px 16px; font-size: 13px;
+}
+.nav-user-menu .btn-outline:hover {
+  color: var(--white); border-color: rgba(255,255,255,.4);
+}
+
+/* --- Auth Pages ------------------------------------------ */
+.auth-container {
+  display: flex; align-items: center; justify-content: center;
+  min-height: calc(100vh - 64px - 80px);
+  padding: 40px 24px;
+}
+.auth-card {
+  width: 100%; max-width: 440px;
+  padding: 48px 40px;
+}
+.auth-header {
+  text-align: center; margin-bottom: 32px;
+}
+.auth-logo-mark {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 26px; color: var(--navy);
+  margin-bottom: 20px;
+}
+.auth-header h2 {
+  font-size: 24px; font-weight: 700; color: var(--navy); margin-bottom: 8px;
+}
+.auth-header p {
+  font-size: 15px; color: var(--gray-500);
+}
+.auth-form {
+  display: flex; flex-direction: column; gap: 20px;
+}
+.auth-error {
+  background: var(--red-light); color: var(--red);
+  padding: 12px 16px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 500;
+  border: 1px solid rgba(220,38,38,.15);
+}
+.auth-success {
+  background: var(--green-light); color: var(--green);
+  padding: 12px 16px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 500;
+  border: 1px solid rgba(22,163,74,.15);
+}
+.auth-success a { color: var(--green); font-weight: 700; text-decoration: underline; }
+.auth-footer {
+  text-align: center; margin-top: 24px;
+  font-size: 14px; color: var(--gray-500);
+}
+.auth-footer a { color: var(--gold-dark); font-weight: 600; }
+.auth-footer a:hover { color: var(--gold); }
+.btn-full { width: 100%; }
+
+@media (max-width: 600px) {
+  .auth-card { padding: 32px 24px; }
+  .user-info { display: none; }
+  .nav-auth-buttons .btn { padding: 8px 14px; font-size: 13px; }
+}
+
 /* --- Hero ------------------------------------------------ */
 .hero {
   background: linear-gradient(160deg, var(--navy) 0%, var(--navy-light) 50%, var(--navy-mid) 100%);

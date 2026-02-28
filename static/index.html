@@ -18,11 +18,96 @@
     </a>
     <div class="nav-links">
       <a href="/" data-view="home">Home</a>
-      <a href="#analyze" data-view="analyze">Analyze</a>
-      <a href="#monitor" data-view="monitor">Monitor</a>
+      <a href="#analyze" data-view="analyze" class="auth-only" style="display:none">Analyze</a>
+      <a href="#monitor" data-view="monitor" class="auth-only" style="display:none">Monitor</a>
+    </div>
+    <div class="nav-right">
+      <!-- Shown when logged out -->
+      <div id="nav-auth-buttons" class="nav-auth-buttons">
+        <a href="#login" data-view="login" class="btn btn-sm btn-outline">Log In</a>
+        <a href="#register" data-view="register" class="btn btn-sm btn-primary">Sign Up</a>
+      </div>
+      <!-- Shown when logged in -->
+      <div id="nav-user-menu" class="nav-user-menu" style="display:none">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div class="user-info">
+          <span class="user-name" id="nav-user-name">User</span>
+          <span class="user-email" id="nav-user-email">user@example.com</span>
+        </div>
+        <button class="btn btn-sm btn-outline" id="logout-btn">Log Out</button>
+      </div>
     </div>
   </div>
 </nav>
+
+<!-- ======== LOGIN VIEW ======== -->
+<div id="view-login" class="view">
+  <section class="page-section">
+    <div class="auth-container">
+      <div class="auth-card card fade-in">
+        <div class="auth-header">
+          <div class="auth-logo-mark">R</div>
+          <h2>Welcome Back</h2>
+          <p>Sign in to your RhôneRisk account</p>
+        </div>
+        <form id="login-form" class="auth-form">
+          <div class="form-group">
+            <label class="form-label" for="login-email">Email Address</label>
+            <input class="form-input" type="email" id="login-email" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="login-password">Password</label>
+            <input class="form-input" type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password">
+          </div>
+          <div id="login-error" class="auth-error" style="display:none"></div>
+          <button type="submit" class="btn btn-primary btn-lg btn-full" id="login-btn">Sign In</button>
+        </form>
+        <div class="auth-footer">
+          Don't have an account? <a href="#register" data-view="register">Create one</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ======== REGISTER VIEW ======== -->
+<div id="view-register" class="view">
+  <section class="page-section">
+    <div class="auth-container">
+      <div class="auth-card card fade-in">
+        <div class="auth-header">
+          <div class="auth-logo-mark">R</div>
+          <h2>Create Account</h2>
+          <p>Get started with RhôneRisk policy analysis</p>
+        </div>
+        <form id="register-form" class="auth-form">
+          <div class="form-group">
+            <label class="form-label" for="register-name">Display Name</label>
+            <input class="form-input" type="text" id="register-name" placeholder="Your name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="register-email">Email Address</label>
+            <input class="form-input" type="email" id="register-email" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="register-password">Password</label>
+            <input class="form-input" type="password" id="register-password" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="register-confirm">Confirm Password</label>
+            <input class="form-input" type="password" id="register-confirm" placeholder="Re-enter password" required minlength="6" autocomplete="new-password">
+          </div>
+          <div id="register-error" class="auth-error" style="display:none"></div>
+          <div id="register-success" class="auth-success" style="display:none"></div>
+          <button type="submit" class="btn btn-primary btn-lg btn-full" id="register-btn">Create Account</button>
+        </form>
+        <div class="auth-footer">
+          Already have an account? <a href="#login" data-view="login">Sign in</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
 
 <!-- ======== HOME VIEW ======== -->
 <div id="view-home" class="view active">
@@ -33,7 +118,7 @@
       <h1>AI-Powered <em>Cyber Insurance</em> Policy Analysis</h1>
       <p>Upload any cyber insurance policy PDF and receive a comprehensive, scored analysis with actionable binding recommendations — powered by advanced AI.</p>
       <div class="hero-actions">
-        <a class="btn btn-primary btn-lg" data-view="analyze">Analyze a Policy</a>
+        <a class="btn btn-primary btn-lg" id="hero-cta" data-view="analyze">Analyze a Policy</a>
         <a class="btn btn-secondary btn-lg" href="#features">Learn More</a>
       </div>
     </div>
