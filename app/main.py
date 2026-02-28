@@ -590,6 +590,99 @@ async def get_analysis_timing(analysis_id: str, user: AuthUser = Depends(get_cur
 
 
 # ---------------------------------------------------------------------------
+# Dashboard endpoint (per-user)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/dashboard")
+async def get_dashboard(user: AuthUser = Depends(get_current_user)):
+    """Return personalized dashboard data for the authenticated user.
+
+    Aggregates per-user stats (total/completed/failed analyses, average score)
+    and returns the most recent analyses with scores, client names, and report links.
+    """
+    store = user_registry.get_store(user.id)
+
+    # Collect this user's analysis records from the monitoring registry
+    user_analyses = []
+    for record_dict in registry.list_all():
+        aid = record_dict.get("analysis_id", "")
+        if user_registry.verify_ownership(user.id, aid):
+            user_analyses.append(record_dict)
+
+    total = len(user_analyses)
+    completed = [a for a in user_analyses if a.get("status") == "completed"]
+    failed = [a for a in user_analyses if a.get("status") == "failed"]
+    in_progress = total - len(completed) - len(failed)
+
+    # Calculate average score across completed analyses that have a PolicyAnalysis
+    scores = []
+    for a in completed:
+        aid = a.get("analysis_id", "")
+        if aid in store.analyses:
+            analysis_obj = store.analyses[aid]
+            scores.append(analysis_obj.overall_score)
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    # Calculate average duration for completed analyses
+    durations = [a["total_duration_seconds"] for a in completed if a.get("total_duration_seconds", 0) > 0]
+    avg_duration = round(sum(durations) / len(durations), 1) if durations else None
+
+    # Build recent analyses list (up to 20, most recent first)
+    recent = []
+    for a in user_analyses[:20]:
+        aid = a.get("analysis_id", "")
+        entry = {
+            "analysis_id": aid,
+            "client_name": a.get("client_name", ""),
+            "filename": a.get("filename", ""),
+            "status": a.get("status", "unknown"),
+            "start_time": a.get("start_time"),
+            "total_duration_seconds": a.get("total_duration_seconds", 0),
+        }
+        # Enrich with score data if the analysis is completed and stored
+        if aid in store.analyses:
+            analysis_obj = store.analyses[aid]
+            entry["overall_score"] = analysis_obj.overall_score
+            entry["overall_rating"] = analysis_obj.overall_rating
+            entry["binding_recommendation"] = analysis_obj.binding_recommendation
+            entry["red_flag_count"] = analysis_obj.red_flag_count
+        # Check if a report is available
+        entry["has_report"] = (
+            aid in store.report_paths or aid in store.report_r2_paths
+        )
+        recent.append(entry)
+
+    # Member since date — look up from DB since token doesn't carry created_at
+    member_since = None
+    try:
+        from app.auth import get_user_by_id
+        db_user = get_user_by_id(user.id)
+        if db_user and db_user.created_at:
+            created_ts = float(db_user.created_at)
+            member_since = datetime.fromtimestamp(created_ts).strftime("%B %d, %Y")
+    except (ValueError, TypeError, OSError):
+        pass
+
+    return JSONResponse(content={
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "member_since": member_since,
+        },
+        "stats": {
+            "total_analyses": total,
+            "completed": len(completed),
+            "failed": len(failed),
+            "in_progress": in_progress,
+            "average_score": avg_score,
+            "average_duration_seconds": avg_duration,
+        },
+        "recent_analyses": recent,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Frontend catch-all (must be last)
 # ---------------------------------------------------------------------------
 

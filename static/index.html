@@ -18,6 +18,7 @@
     </a>
     <div class="nav-links">
       <a href="/" data-view="home">Home</a>
+      <a href="#dashboard" data-view="dashboard" class="auth-only" style="display:none">Dashboard</a>
       <a href="#analyze" data-view="analyze" class="auth-only" style="display:none">Analyze</a>
       <a href="#monitor" data-view="monitor" class="auth-only" style="display:none">Monitor</a>
     </div>
@@ -163,6 +164,86 @@
     </div>
   </section>
 
+</div>
+
+<!-- ======== DASHBOARD VIEW (per-user, post-login landing) ======== -->
+<div id="view-dashboard" class="view">
+
+  <!-- Welcome Hero -->
+  <section class="dash-hero">
+    <div class="container">
+      <div class="dash-hero-inner">
+        <div class="dash-hero-text">
+          <h1 class="dash-greeting">Welcome back, <span id="dash-user-name">User</span></h1>
+          <p class="dash-subtitle" id="dash-subtitle">Here's an overview of your policy analysis activity.</p>
+        </div>
+        <div class="dash-hero-action">
+          <a class="btn btn-primary btn-lg" data-view="analyze" id="dash-new-analysis">+ New Analysis</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page-section" style="padding-top:0">
+    <div class="container">
+
+      <!-- Quick Stats -->
+      <div class="dash-stats">
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-total">&#128202;</div>
+          <div class="dash-stat-value" id="dash-total">0</div>
+          <div class="dash-stat-label">Total Analyses</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-completed">&#9989;</div>
+          <div class="dash-stat-value dash-stat-green" id="dash-completed">0</div>
+          <div class="dash-stat-label">Completed</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-failed">&#10060;</div>
+          <div class="dash-stat-value dash-stat-red" id="dash-failed">0</div>
+          <div class="dash-stat-label">Failed</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-score">&#127942;</div>
+          <div class="dash-stat-value dash-stat-gold" id="dash-avg-score">&mdash;</div>
+          <div class="dash-stat-label">Avg. Score</div>
+        </div>
+      </div>
+
+      <!-- Recent Analyses -->
+      <div class="card fade-in" style="margin-top:28px">
+        <div class="dash-section-header">
+          <h3>Recent Analyses</h3>
+          <button class="btn btn-sm btn-outline" id="dash-refresh-btn">Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="dash-table" id="dash-analyses-table">
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Policy File</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Rating</th>
+                <th>Red Flags</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dash-analyses-tbody"></tbody>
+          </table>
+        </div>
+        <div id="dash-empty" class="dash-empty-state" style="display:none">
+          <div class="dash-empty-icon">&#128196;</div>
+          <h3>No analyses yet</h3>
+          <p>Upload your first cyber insurance policy PDF to get started with AI-powered analysis.</p>
+          <a class="btn btn-primary btn-lg" data-view="analyze">Analyze a Policy</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
 </div>
 
 <!-- ======== ANALYZE VIEW ======== -->

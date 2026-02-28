@@ -194,7 +194,7 @@
       });
       updateAuthUI();
       toast('Signed in successfully!');
-      navigate('home');
+      navigate('dashboard');
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.style.display = 'block';
@@ -248,7 +248,7 @@
         });
         updateAuthUI();
         toast('Account created! Welcome to RhôneRisk.');
-        navigate('home');
+        navigate('dashboard');
       } else {
         // Email confirmation required
         successEl.innerHTML = 'Account created! Please check your email to confirm your account, then <a href="#login" data-view="login">sign in</a>.';
@@ -278,7 +278,7 @@
   // ---- Navigation -------------------------------------------
   function navigate(view) {
     // Auth guard: protected views require login
-    const protectedViews = ['analyze', 'progress', 'results', 'monitor'];
+    const protectedViews = ['dashboard', 'analyze', 'progress', 'results', 'monitor'];
     if (protectedViews.includes(view) && !authToken) {
       toast('Please sign in to access this feature.', true);
       navigate('login');
@@ -302,6 +302,7 @@
       history.replaceState(null, '', `#${view}`);
     }
 
+    if (view === 'dashboard') loadDashboard();
     if (view === 'monitor') loadMonitorData();
   }
 
@@ -676,6 +677,138 @@
     }
   }
 
+  // ---- Dashboard (per-user) ---------------------------------
+  async function loadDashboard() {
+    if (!authToken) return;
+    try {
+      const res = await authFetch('/api/v1/dashboard');
+      if (res.status === 401) { handleLogout(); return; }
+      if (!res.ok) throw new Error('Failed to load dashboard');
+      const data = await res.json();
+      renderDashboard(data);
+    } catch (err) {
+      toast('Failed to load dashboard data.', true);
+    }
+  }
+
+  function renderDashboard(data) {
+    const user = data.user || {};
+    const stats = data.stats || {};
+    const recent = data.recent_analyses || [];
+
+    // Welcome section
+    const nameEl = $('#dash-user-name');
+    if (nameEl) nameEl.textContent = user.display_name || user.email?.split('@')[0] || 'User';
+
+    const subtitleEl = $('#dash-subtitle');
+    if (subtitleEl) {
+      const parts = [];
+      if (user.member_since) parts.push(`Member since ${user.member_since}`);
+      if (stats.total_analyses > 0) {
+        parts.push(`${stats.total_analyses} ${stats.total_analyses === 1 ? 'analysis' : 'analyses'} run`);
+      }
+      subtitleEl.textContent = parts.length > 0
+        ? parts.join(' \u00B7 ')
+        : "Here's an overview of your policy analysis activity.";
+    }
+
+    // Stats cards
+    const setVal = (id, val) => { const el = $(`#${id}`); if (el) el.textContent = val; };
+    setVal('dash-total', stats.total_analyses || 0);
+    setVal('dash-completed', stats.completed || 0);
+    setVal('dash-failed', stats.failed || 0);
+    setVal('dash-avg-score', stats.average_score != null ? `${stats.average_score}/10` : '\u2014');
+
+    // Recent analyses table
+    const tbody = $('#dash-analyses-tbody');
+    const table = $('#dash-analyses-table');
+    const emptyState = $('#dash-empty');
+
+    if (!recent.length) {
+      if (table) table.style.display = 'none';
+      if (emptyState) emptyState.style.display = 'block';
+      return;
+    }
+
+    if (table) table.style.display = '';
+    if (emptyState) emptyState.style.display = 'none';
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    recent.forEach(a => {
+      const tr = document.createElement('tr');
+
+      // Score pill
+      let scoreHtml = '<span class="dash-score dash-score-na">\u2014</span>';
+      if (a.overall_score != null) {
+        const s = a.overall_score;
+        const cls = s >= 7 ? 'dash-score-high' : s >= 4 ? 'dash-score-mid' : 'dash-score-low';
+        scoreHtml = `<span class="dash-score ${cls}">${s.toFixed(1)}</span>`;
+      }
+
+      // Rating badge
+      let ratingHtml = '<span class="dash-rating dash-rating-none">\u2014</span>';
+      if (a.overall_rating) {
+        const r = a.overall_rating.toLowerCase();
+        let cls = 'dash-rating-none';
+        if (r.includes('superior')) cls = 'dash-rating-superior';
+        else if (r.includes('average')) cls = 'dash-rating-average';
+        else if (r.includes('basic')) cls = 'dash-rating-basic';
+        ratingHtml = `<span class="dash-rating ${cls}">${escapeHtml(a.overall_rating)}</span>`;
+      }
+
+      // Red flags
+      let flagsHtml = '<span class="dash-flags dash-flags-ok">0</span>';
+      if (a.red_flag_count != null && a.red_flag_count > 0) {
+        flagsHtml = `<span class="dash-flags dash-flags-warn">\u26A0 ${a.red_flag_count}</span>`;
+      } else if (a.status !== 'completed') {
+        flagsHtml = '<span class="dash-flags" style="color:var(--gray-400)">\u2014</span>';
+      }
+
+      // Date
+      let dateStr = '\u2014';
+      if (a.start_time) {
+        try {
+          const d = new Date(a.start_time);
+          dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch { dateStr = '\u2014'; }
+      }
+
+      // Actions
+      let actionsHtml = '';
+      if (a.status === 'completed') {
+        actionsHtml += `<button class="btn btn-sm btn-outline dash-view-btn" data-id="${a.analysis_id}">View</button>`;
+        if (a.has_report) {
+          actionsHtml += `<a href="/api/v1/analyze/${a.analysis_id}/report?token=${encodeURIComponent(authToken)}" download class="btn btn-sm btn-primary" style="text-decoration:none" title="Download PDF">&#8595; PDF</a>`;
+        }
+      } else if (a.status === 'failed') {
+        actionsHtml = `<span style="font-size:12px;color:var(--red)">Failed</span>`;
+      } else {
+        actionsHtml = `<span style="font-size:12px;color:var(--amber)">In progress\u2026</span>`;
+      }
+
+      tr.innerHTML = `
+        <td style="font-weight:600">${escapeHtml(a.client_name || '\u2014')}</td>
+        <td title="${escapeHtml(a.filename || '')}">${truncate(a.filename || '\u2014', 25)}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td>${scoreHtml}</td>
+        <td>${ratingHtml}</td>
+        <td>${flagsHtml}</td>
+        <td style="white-space:nowrap;font-size:13px;color:var(--gray-500)">${dateStr}</td>
+        <td><div class="dash-actions">${actionsHtml}</div></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Wire up view buttons to show results
+    $$('.dash-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        analysisId = btn.dataset.id;
+        loadResults().then(() => navigate('results'));
+      });
+    });
+  }
+
   // ---- Monitor Dashboard ------------------------------------
   async function loadMonitorData() {
     if (!authToken) return;
@@ -908,10 +1041,12 @@
     const logoutBtn = $('#logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 
-    // Handle hash
+    // Handle hash — if logged in and no specific hash, go to dashboard
     const hash = location.hash.replace('#', '');
     if (hash && $(`#view-${hash}`)) {
       navigate(hash);
+    } else if (authToken) {
+      navigate('dashboard');
     } else {
       navigate('home');
     }
@@ -935,6 +1070,11 @@
     // Error retry
     if ($('#error-retry')) {
       $('#error-retry').addEventListener('click', () => navigate('analyze'));
+    }
+
+    // Dashboard: refresh button
+    if ($('#dash-refresh-btn')) {
+      $('#dash-refresh-btn').addEventListener('click', loadDashboard);
     }
 
     // Monitor: refresh button
