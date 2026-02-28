@@ -13,6 +13,10 @@ class PolicyMetadata(BaseModel):
     premium: str = ""
     retroactive_date: str = ""
     policy_form: str = ""
+    waiting_period: str = ""
+    continuity_date: str = ""
+    extended_reporting_period: str = ""
+    aggregate_retention: str = ""
 
 
 class ScoringFactors(BaseModel):
@@ -28,13 +32,37 @@ class ScoringFactors(BaseModel):
 class CoverageScore(BaseModel):
     coverage_name: str
     coverage_category: str = ""  # "third_party", "first_party", "cyber_crime", "policy_terms"
+    coverage_subcategory: str = ""  # e.g. "incident_response", "regulatory", "business_interruption", "extortion", "ecrime", "additional"
     score: int = Field(ge=0, le=10)
     rating: str  # "Superior", "Average", "Basic", "No Coverage"
-    justification: str
+    limit: str = ""  # e.g. "$1,000,000 each Claim"
+    retention: str = ""  # e.g. "$2,500"
+    analysis: str = ""  # Detailed analysis paragraph explaining the reasoning
+    recommendation: str = ""  # Specific recommendation for this coverage
+    justification: str = ""  # Legacy field — kept for backward compatibility
     red_flags: list[str] = Field(default_factory=list)
     scoring_factors: ScoringFactors = Field(default_factory=ScoringFactors)
     key_provisions: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+
+
+class CategorySummary(BaseModel):
+    """Summary for a coverage category group."""
+    category_key: str  # e.g. "third_party", "incident_response", "regulatory", etc.
+    category_name: str  # Display name, e.g. "Third-Party Liability Coverages"
+    average_score: float = 0.0
+    assessment: str = ""  # One-line assessment for the category maturity table
+    key_findings: list[str] = Field(default_factory=list)  # Bullet points of strengths and gaps
+
+
+class StrategicRecommendation(BaseModel):
+    """A strategic recommendation with priority and budget impact."""
+    title: str
+    priority: str = ""  # "High", "Medium", "Low"
+    description: str = ""  # Detailed description of the recommendation
+    action: str = ""  # Specific action to take
+    budget_impact: str = ""  # Estimated budget impact
+    timeframe: str = ""  # "immediate" or "medium_term"
 
 
 class ReportSections(BaseModel):
@@ -59,6 +87,11 @@ class ReportSections(BaseModel):
     scenario_analysis: str = ""
     recommendations: str = ""
     binding_recommendation: str = ""
+    # New fields for enhanced report format
+    policy_strengths: list[str] = Field(default_factory=list)
+    areas_for_enhancement: list[str] = Field(default_factory=list)
+    risk_management_items: list[str] = Field(default_factory=list)
+    final_recommendation_detail: str = ""
 
 
 class PolicyAnalysis(BaseModel):
@@ -73,3 +106,5 @@ class PolicyAnalysis(BaseModel):
     report_sections: ReportSections
     red_flag_count: int = 0
     critical_gaps: list[str] = Field(default_factory=list)
+    category_summaries: list[CategorySummary] = Field(default_factory=list)
+    strategic_recommendations: list[StrategicRecommendation] = Field(default_factory=list)

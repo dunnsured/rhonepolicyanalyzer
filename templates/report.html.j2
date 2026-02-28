@@ -10,36 +10,34 @@
 {# ===== COVER PAGE ===== #}
 <div class="cover-page">
     <img src="assets/RhoneRiskLogo1.png" alt="RhôneRisk Advisory" class="cover-logo" onerror="this.style.display='none'">
-    <div class="cover-title">Cyber Insurance<br>Policy Analysis</div>
+    <div class="cover-title">Cyber Insurance<br>Due Diligence Report</div>
     <div class="cover-subtitle">Comprehensive Coverage Maturity Assessment</div>
     <div class="cover-info">
         {% if metadata.named_insured %}<strong>Prepared for:</strong> {{ metadata.named_insured }}<br>{% endif %}
         {% if metadata.carrier_name %}<strong>Carrier:</strong> {{ metadata.carrier_name }}<br>{% endif %}
         {% if metadata.policy_number %}<strong>Policy:</strong> {{ metadata.policy_number }}<br>{% endif %}
         {% if metadata.effective_date %}<strong>Policy Period:</strong> {{ metadata.effective_date }}{% if metadata.expiration_date %} to {{ metadata.expiration_date }}{% endif %}<br>{% endif %}
-        <strong>Analysis Date:</strong> {{ generation_date }}<br>
-        <strong>Prepared by:</strong> RhôneRisk Advisory
+        <strong>Date Prepared:</strong> {{ generation_date }}<br>
+        <strong>Prepared By:</strong> RhôneRisk Advisory
     </div>
     <div class="cover-classification">CONFIDENTIAL — CLIENT USE ONLY</div>
 </div>
 
 {# ===== EXECUTIVE SUMMARY ===== #}
 <div class="section">
-    <h1>1. Executive Summary</h1>
+    <h1>Executive Summary</h1>
+
+    <div class="section-content">
+        {{ sections.executive_summary | md_to_html }}
+    </div>
 
     <div class="overall-score-container">
         <div class="overall-score-number {{ score_color(overall_score | round | int) }}">
-            {{ "%.1f" | format(overall_score) }}
+            {{ "%.1f" | format(overall_score) }}/10
         </div>
         <div class="overall-score-details">
             <div class="overall-score-label">Overall Policy Maturity Score</div>
             <div class="overall-score-rating">{{ overall_rating }}</div>
-        </div>
-        <div>
-            <div class="overall-score-label">Red Flags</div>
-            <div class="overall-score-rating {% if red_flag_count > 0 %}score-none{% else %}score-superior{% endif %}">
-                {{ red_flag_count }}
-            </div>
         </div>
     </div>
 
@@ -54,190 +52,326 @@
         <div class="binding-rec-title">{{ binding_recommendation | upper }}</div>
         <div class="binding-rec-rationale">{{ binding_rationale }}</div>
     </div>
-
-    <div class="section-content">
-        {{ sections.executive_summary | replace('\n', '<br>') }}
-    </div>
 </div>
 
-{# ===== POLICY DECLARATIONS ===== #}
+{# ===== POLICY OVERVIEW ===== #}
 <div class="section page-break">
-    <h1>2. Policy Declarations</h1>
+    <h1>Policy Overview</h1>
+
+    {# Key metrics bar #}
+    <div class="policy-metrics">
+        {% if metadata.premium %}<div class="metric"><div class="metric-value">{{ metadata.premium }}</div><div class="metric-label">Annual Premium</div></div>{% endif %}
+        {% if metadata.aggregate_limit %}<div class="metric"><div class="metric-value">{{ metadata.aggregate_limit }}</div><div class="metric-label">Policy Aggregate Limit</div></div>{% endif %}
+        {% if metadata.deductible %}<div class="metric"><div class="metric-value">{{ metadata.deductible }}</div><div class="metric-label">Standard Retention</div></div>{% endif %}
+        {% if metadata.retroactive_date %}<div class="metric"><div class="metric-value">{{ metadata.retroactive_date }}</div><div class="metric-label">Retroactive Date</div></div>{% endif %}
+        {% if metadata.waiting_period %}<div class="metric"><div class="metric-value">{{ metadata.waiting_period }}</div><div class="metric-label">Waiting Period (BI)</div></div>{% endif %}
+    </div>
+
+    {# Policy Feature Details table #}
+    <h2>Policy Feature Details</h2>
     <table>
-        <thead><tr><th>Field</th><th>Details</th></tr></thead>
+        <thead><tr><th>Policy Feature</th><th>Details</th><th>Assessment</th></tr></thead>
         <tbody>
-            <tr><td><strong>Policy Number</strong></td><td>{{ metadata.policy_number or 'N/A' }}</td></tr>
-            <tr><td><strong>Carrier</strong></td><td>{{ metadata.carrier_name or 'N/A' }}</td></tr>
-            <tr><td><strong>Named Insured</strong></td><td>{{ metadata.named_insured or 'N/A' }}</td></tr>
-            <tr><td><strong>Effective Date</strong></td><td>{{ metadata.effective_date or 'N/A' }}</td></tr>
-            <tr><td><strong>Expiration Date</strong></td><td>{{ metadata.expiration_date or 'N/A' }}</td></tr>
-            <tr><td><strong>Aggregate Limit</strong></td><td>{{ metadata.aggregate_limit or 'N/A' }}</td></tr>
-            <tr><td><strong>Per Occurrence Limit</strong></td><td>{{ metadata.per_occurrence_limit or 'N/A' }}</td></tr>
-            <tr><td><strong>Deductible/Retention</strong></td><td>{{ metadata.deductible or 'N/A' }}</td></tr>
-            <tr><td><strong>Annual Premium</strong></td><td>{{ metadata.premium or 'N/A' }}</td></tr>
-            <tr><td><strong>Retroactive Date</strong></td><td>{{ metadata.retroactive_date or 'N/A' }}</td></tr>
-            <tr><td><strong>Policy Form</strong></td><td>{{ metadata.policy_form or 'N/A' }}</td></tr>
+            <tr><td><strong>Policy Number</strong></td><td>{{ metadata.policy_number or 'N/A' }}</td><td>{% if metadata.policy_number %}Valid{% else %}—{% endif %}</td></tr>
+            <tr><td><strong>Carrier</strong></td><td>{{ metadata.carrier_name or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Named Insured</strong></td><td>{{ metadata.named_insured or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Policy Period</strong></td><td>{{ metadata.effective_date or 'N/A' }}{% if metadata.expiration_date %} to {{ metadata.expiration_date }}{% endif %}</td><td>Standard 12-month term</td></tr>
+            {% if metadata.continuity_date %}<tr><td><strong>Continuity Date</strong></td><td>{{ metadata.continuity_date }}</td><td></td></tr>{% endif %}
+            <tr><td><strong>Aggregate Limit</strong></td><td>{{ metadata.aggregate_limit or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Per Occurrence Limit</strong></td><td>{{ metadata.per_occurrence_limit or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Deductible/Retention</strong></td><td>{{ metadata.deductible or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Annual Premium</strong></td><td>{{ metadata.premium or 'N/A' }}</td><td></td></tr>
+            <tr><td><strong>Retroactive Date</strong></td><td>{{ metadata.retroactive_date or 'N/A' }}</td><td></td></tr>
+            {% if metadata.extended_reporting_period %}<tr><td><strong>Extended Reporting Period</strong></td><td>{{ metadata.extended_reporting_period }}</td><td></td></tr>{% endif %}
+            {% if metadata.aggregate_retention %}<tr><td><strong>Aggregate Retention</strong></td><td>{{ metadata.aggregate_retention }}</td><td></td></tr>{% endif %}
+            <tr><td><strong>Policy Form</strong></td><td>{{ metadata.policy_form or 'N/A' }}</td><td></td></tr>
         </tbody>
     </table>
 
     {% if sections.policy_overview %}
     <div class="section-content">
-        {{ sections.policy_overview | replace('\n', '<br>') }}
+        {{ sections.policy_overview | md_to_html }}
     </div>
     {% endif %}
 </div>
 
-{# ===== COVERAGE SCORING MATRIX ===== #}
+{# ===== THIRD-PARTY LIABILITY COVERAGES ===== #}
 <div class="section page-break">
-    <h1>3. Coverage Scoring Matrix</h1>
-
-    {% if sections.coverage_scoring_matrix %}
-    <div class="section-content mb-1">
-        {{ sections.coverage_scoring_matrix | replace('\n', '<br>') }}
-    </div>
-    {% endif %}
-
-    {# Third-Party Liability #}
-    <h2>Third-Party Liability Coverages</h2>
-    <table>
-        <thead>
-            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
-        </thead>
-        <tbody>
-        {% for s in third_party_scores %}
-            <tr>
-                <td><strong>{{ s.coverage_name }}</strong></td>
-                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
-                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
-                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {# First-Party #}
-    <h2>First-Party Coverages</h2>
-    <table>
-        <thead>
-            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
-        </thead>
-        <tbody>
-        {% for s in first_party_scores %}
-            <tr>
-                <td><strong>{{ s.coverage_name }}</strong></td>
-                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
-                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
-                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    {# Cyber Crime #}
-    <h2>Cyber Crime Coverages</h2>
-    <table>
-        <thead>
-            <tr><th>Coverage</th><th>Score</th><th>Rating</th><th>Red Flags</th></tr>
-        </thead>
-        <tbody>
-        {% for s in cyber_crime_scores %}
-            <tr>
-                <td><strong>{{ s.coverage_name }}</strong></td>
-                <td class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</td>
-                <td><span class="badge {{ rating_badge_class(s.rating) }}">{{ s.rating }}</span></td>
-                <td>{% if s.red_flags %}{{ s.red_flags | join(', ') }}{% else %}None{% endif %}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-{# ===== DETAILED COVERAGE ANALYSIS ===== #}
-<div class="section page-break">
-    <h1>4. Third-Party Liability Analysis</h1>
-    <div class="section-content">
-        {{ sections.third_party_analysis | replace('\n', '<br>') }}
-    </div>
+    <h1>Third-Party Liability Coverages — Maturity Analysis</h1>
+    <div class="category-label">LIABILITY COVERAGES</div>
 
     {% for s in third_party_scores %}
-    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
-    <p>{{ s.justification }}</p>
-    {% if s.red_flags %}
-    <div class="red-flag-alert">
-        <div class="red-flag-title">Red Flags</div>
-        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
+    <div class="coverage-card">
+        <h3>{{ s.coverage_name }}</h3>
+        <div class="coverage-meta">
+            {% if s.limit %}<span class="coverage-meta-item"><strong>Limit:</strong> {{ s.limit }}</span>{% endif %}
+            {% if s.retention %}<span class="coverage-meta-item"><strong>Retention:</strong> {{ s.retention }}</span>{% endif %}
+            <span class="coverage-meta-item"><strong>Maturity Score:</strong> <span class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</span></span>
+        </div>
+        {% if s.analysis %}
+        <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.analysis }}</p>
+        {% elif s.justification %}
+        <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.justification }}</p>
+        {% endif %}
+        {% if s.recommendation %}
+        <p class="coverage-recommendation"><strong>Recommendation:</strong> {{ s.recommendation }}</p>
+        {% endif %}
+        {% if s.red_flags %}
+        <div class="red-flag-inline">
+            <strong>Red Flags:</strong> {{ s.red_flags | join('; ') }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {# Third-Party Key Findings #}
+    {% set tp_summary = category_summaries_map.get('third_party') or category_summaries_map.get('liability') %}
+    {% if tp_summary %}
+    <div class="key-findings-box">
+        <h3>Third-Party Liability — Key Findings</h3>
+        <div class="key-findings-score">Average Maturity Score: <strong class="{{ score_color(tp_summary.average_score | round | int) }}">{{ "%.1f" | format(tp_summary.average_score) }}/10</strong></div>
+        <ul>
+        {% for finding in tp_summary.key_findings %}
+            <li>{{ finding }}</li>
+        {% endfor %}
+        </ul>
     </div>
     {% endif %}
-    {% if s.recommendations %}
-    <p><strong>Recommendations:</strong></p>
-    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
-    {% endif %}
+</div>
+
+{# ===== FIRST-PARTY COVERAGES ===== #}
+<div class="section page-break">
+    <h1>First-Party Coverages — Maturity Analysis</h1>
+
+    {# Group first-party by subcategory #}
+    {% set subcategory_order = ['incident_response', 'regulatory', 'business_interruption', 'extortion', 'additional'] %}
+    {% set subcategory_labels = {
+        'incident_response': 'INCIDENT RESPONSE & BREACH COSTS',
+        'regulatory': 'REGULATORY & LEGAL',
+        'business_interruption': 'BUSINESS INTERRUPTION & DEPENDENT BUSINESS',
+        'extortion': 'CYBER EXTORTION & DATA RECOVERY',
+        'additional': 'ADDITIONAL COVERAGES'
+    } %}
+    {% set subcategory_display_names = {
+        'incident_response': 'Incident Response & Breach Costs',
+        'regulatory': 'Regulatory & Legal',
+        'business_interruption': 'Business Interruption',
+        'extortion': 'Cyber Extortion & Data Recovery',
+        'additional': 'Additional Coverages'
+    } %}
+
+    {% for subcat in subcategory_order %}
+        {% set subcat_scores = first_party_by_subcat.get(subcat, []) %}
+        {% if subcat_scores %}
+        <div class="category-label">{{ subcategory_labels.get(subcat, subcat | upper) }}</div>
+
+        {% for s in subcat_scores %}
+        <div class="coverage-card">
+            <h3>{{ s.coverage_name }}</h3>
+            <div class="coverage-meta">
+                {% if s.limit %}<span class="coverage-meta-item"><strong>Limit:</strong> {{ s.limit }}</span>{% endif %}
+                {% if s.retention %}<span class="coverage-meta-item"><strong>Retention:</strong> {{ s.retention }}</span>{% endif %}
+                <span class="coverage-meta-item"><strong>Maturity Score:</strong> <span class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</span></span>
+            </div>
+            {% if s.analysis %}
+            <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.analysis }}</p>
+            {% elif s.justification %}
+            <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.justification }}</p>
+            {% endif %}
+            {% if s.recommendation %}
+            <p class="coverage-recommendation"><strong>Recommendation:</strong> {{ s.recommendation }}</p>
+            {% endif %}
+            {% if s.red_flags %}
+            <div class="red-flag-inline">
+                <strong>Red Flags:</strong> {{ s.red_flags | join('; ') }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {# Subcategory Key Findings #}
+        {% set subcat_summary = category_summaries_map.get(subcat) %}
+        {% if subcat_summary %}
+        <div class="key-findings-box">
+            <h3>{{ subcategory_display_names.get(subcat, subcat) }} — Key Findings</h3>
+            <div class="key-findings-score">Average Maturity Score: <strong class="{{ score_color(subcat_summary.average_score | round | int) }}">{{ "%.1f" | format(subcat_summary.average_score) }}/10</strong></div>
+            <ul>
+            {% for finding in subcat_summary.key_findings %}
+                <li>{{ finding }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% endif %}
     {% endfor %}
 </div>
 
+{# ===== CYBER CRIME / eCRIME COVERAGES ===== #}
+{% if cyber_crime_scores %}
 <div class="section page-break">
-    <h1>5. First-Party Coverage Analysis</h1>
-    <div class="section-content">
-        {{ sections.first_party_analysis | replace('\n', '<br>') }}
-    </div>
-
-    {% for s in first_party_scores %}
-    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
-    <p>{{ s.justification }}</p>
-    {% if s.red_flags %}
-    <div class="red-flag-alert">
-        <div class="red-flag-title">Red Flags</div>
-        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
-    </div>
-    {% endif %}
-    {% if s.recommendations %}
-    <p><strong>Recommendations:</strong></p>
-    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
-    {% endif %}
-    {% endfor %}
-</div>
-
-<div class="section page-break">
-    <h1>6. Cyber Crime Coverage Analysis</h1>
-    <div class="section-content">
-        {{ sections.cyber_crime_analysis | replace('\n', '<br>') }}
-    </div>
+    <h1>eCrime Coverages — Maturity Analysis</h1>
+    <div class="category-label">eCRIME COVERAGES</div>
 
     {% for s in cyber_crime_scores %}
-    <h3>{{ s.coverage_name }} — {{ s.score }}/10 ({{ s.rating }})</h3>
-    <p>{{ s.justification }}</p>
-    {% if s.red_flags %}
-    <div class="red-flag-alert">
-        <div class="red-flag-title">Red Flags</div>
-        {% for rf in s.red_flags %}<div>{{ rf }}</div>{% endfor %}
+    <div class="coverage-card">
+        <h3>{{ s.coverage_name }}</h3>
+        <div class="coverage-meta">
+            {% if s.limit %}<span class="coverage-meta-item"><strong>Limit:</strong> {{ s.limit }}</span>{% endif %}
+            {% if s.retention %}<span class="coverage-meta-item"><strong>Retention:</strong> {{ s.retention }}</span>{% endif %}
+            <span class="coverage-meta-item"><strong>Maturity Score:</strong> <span class="{{ score_color(s.score) }} fw-bold">{{ s.score }}/10</span></span>
+        </div>
+        {% if s.analysis %}
+        <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.analysis }}</p>
+        {% elif s.justification %}
+        <p class="coverage-analysis"><strong>Analysis:</strong> {{ s.justification }}</p>
+        {% endif %}
+        {% if s.recommendation %}
+        <p class="coverage-recommendation"><strong>Recommendation:</strong> {{ s.recommendation }}</p>
+        {% endif %}
+        {% if s.red_flags %}
+        <div class="red-flag-inline">
+            <strong>Red Flags:</strong> {{ s.red_flags | join('; ') }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {# eCrime Key Findings #}
+    {% set ecrime_summary = category_summaries_map.get('ecrime') or category_summaries_map.get('cyber_crime') %}
+    {% if ecrime_summary %}
+    <div class="key-findings-box">
+        <h3>eCrime Coverages — Key Findings</h3>
+        <div class="key-findings-score">Average Maturity Score: <strong class="{{ score_color(ecrime_summary.average_score | round | int) }}">{{ "%.1f" | format(ecrime_summary.average_score) }}/10</strong></div>
+        <ul>
+        {% for finding in ecrime_summary.key_findings %}
+            <li>{{ finding }}</li>
+        {% endfor %}
+        </ul>
     </div>
     {% endif %}
-    {% if s.recommendations %}
-    <p><strong>Recommendations:</strong></p>
-    <ul>{% for r in s.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{# ===== OVERALL POLICY ASSESSMENT ===== #}
+<div class="section page-break">
+    <h1>Overall Policy Assessment &amp; Maturity Summary</h1>
+
+    {# Strengths vs Enhancement two-column layout #}
+    {% if sections.policy_strengths or sections.areas_for_enhancement %}
+    <div class="assessment-columns">
+        <div class="assessment-col strengths-col">
+            <h3>Policy Strengths</h3>
+            <ul>
+            {% for item in sections.policy_strengths %}
+                <li>{{ item }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        <div class="assessment-col enhancement-col">
+            <h3>Areas for Enhancement</h3>
+            <ul>
+            {% for item in sections.areas_for_enhancement %}
+                <li>{{ item }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
     {% endif %}
+
+    {# Category Maturity Scores Table #}
+    {% if category_summaries %}
+    <h2>Category Maturity Scores</h2>
+    <table>
+        <thead>
+            <tr><th>Coverage Category</th><th>Average Maturity Score</th><th>Assessment</th></tr>
+        </thead>
+        <tbody>
+        {% for cs in category_summaries %}
+            <tr>
+                <td><strong>{{ cs.category_name }}</strong></td>
+                <td class="{{ score_color(cs.average_score | round | int) }} fw-bold">{{ "%.1f" | format(cs.average_score) }}/10</td>
+                <td>{{ cs.assessment }}</td>
+            </tr>
+        {% endfor %}
+            <tr class="overall-row">
+                <td><strong>OVERALL POLICY MATURITY</strong></td>
+                <td class="{{ score_color(overall_score | round | int) }} fw-bold">{{ "%.1f" | format(overall_score) }}/10</td>
+                <td><strong>{{ overall_rating }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+{# ===== STRATEGIC RECOMMENDATIONS ===== #}
+{% if strategic_recommendations %}
+<div class="section page-break">
+    <h1>Strategic Recommendations</h1>
+
+    {% set immediate_recs = [] %}
+    {% set medium_recs = [] %}
+    {% for sr in strategic_recommendations %}
+        {% if sr.timeframe == 'immediate' %}
+            {% if immediate_recs.append(sr) %}{% endif %}
+        {% else %}
+            {% if medium_recs.append(sr) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+
+    {% if immediate_recs %}
+    <h2>Immediate Considerations (Prior to Binding)</h2>
+    {% for sr in immediate_recs %}
+    <div class="strategic-rec">
+        <h3>{{ sr.title }}</h3>
+        <div class="rec-priority">Priority: <strong>{{ sr.priority }}</strong></div>
+        <p>{{ sr.description }}</p>
+        {% if sr.action %}<p><strong>Action:</strong> {{ sr.action }}</p>{% endif %}
+        {% if sr.budget_impact %}<p><strong>Budget Impact:</strong> {{ sr.budget_impact }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if medium_recs %}
+    <h2>Medium-Term Enhancements (Next Renewal)</h2>
+    {% for sr in medium_recs %}
+    <div class="strategic-rec">
+        <h3>{{ sr.title }}</h3>
+        <p>{{ sr.description }}</p>
+        {% if sr.action %}<p><strong>Action:</strong> {{ sr.action }}</p>{% endif %}
+        {% if sr.budget_impact %}<p><strong>Budget Impact:</strong> {{ sr.budget_impact }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endif %}
+
+{# ===== RISK MANAGEMENT ===== #}
+{% if sections.risk_management_items %}
+<div class="section page-break">
+    <h1>Risk Management &amp; Loss Control</h1>
+    {% for idx in range(sections.risk_management_items | length) %}
+    <div class="risk-mgmt-item">
+        <div class="risk-mgmt-number">{{ idx + 1 }}</div>
+        <div class="risk-mgmt-content">{{ sections.risk_management_items[idx] }}</div>
+    </div>
     {% endfor %}
 </div>
+{% endif %}
 
 {# ===== EXCLUSION ANALYSIS ===== #}
+{% if sections.exclusion_analysis %}
 <div class="section page-break">
-    <h1>7. Exclusion Analysis</h1>
+    <h1>Exclusion Analysis</h1>
     <div class="section-content">
-        {{ sections.exclusion_analysis | replace('\n', '<br>') }}
+        {{ sections.exclusion_analysis | md_to_html }}
     </div>
 </div>
-
-{# ===== POLICY TERMS ===== #}
-<div class="section page-break">
-    <h1>8. Policy Terms & Critical Features</h1>
-    <div class="section-content">
-        {{ sections.policy_terms_analysis | replace('\n', '<br>') }}
-    </div>
-</div>
+{% endif %}
 
 {# ===== GAP ANALYSIS ===== #}
 <div class="section page-break">
-    <h1>9. Coverage Gap Analysis</h1>
+    <h1>Coverage Gap Analysis</h1>
 
     {% if critical_gaps %}
     <h2>Critical Gaps</h2>
@@ -246,17 +380,19 @@
     {% endfor %}
     {% endif %}
 
+    {% if sections.gap_analysis %}
     <div class="section-content">
-        {{ sections.gap_analysis | replace('\n', '<br>') }}
+        {{ sections.gap_analysis | md_to_html }}
     </div>
+    {% endif %}
 </div>
 
 {# ===== RED FLAG SUMMARY ===== #}
 {% if sections.red_flag_summary %}
 <div class="section page-break">
-    <h1>10. Red Flag Summary</h1>
+    <h1>Red Flag Summary</h1>
     <div class="section-content">
-        {{ sections.red_flag_summary | replace('\n', '<br>') }}
+        {{ sections.red_flag_summary | md_to_html }}
     </div>
 </div>
 {% endif %}
@@ -264,9 +400,9 @@
 {# ===== SCENARIO ANALYSIS ===== #}
 {% if sections.scenario_analysis %}
 <div class="section page-break">
-    <h1>11. Risk Quantification & Scenario Analysis</h1>
+    <h1>Risk Quantification &amp; Scenario Analysis</h1>
     <div class="section-content">
-        {{ sections.scenario_analysis | replace('\n', '<br>') }}
+        {{ sections.scenario_analysis | md_to_html }}
     </div>
 </div>
 {% endif %}
@@ -274,116 +410,121 @@
 {# ===== BENCHMARKING ===== #}
 {% if sections.benchmarking_analysis %}
 <div class="section page-break">
-    <h1>12. Benchmarking Analysis</h1>
+    <h1>Benchmarking Analysis</h1>
     <div class="section-content">
-        {{ sections.benchmarking_analysis | replace('\n', '<br>') }}
+        {{ sections.benchmarking_analysis | md_to_html }}
     </div>
 </div>
 {% endif %}
 
-{# ===== INDUSTRY-SPECIFIC ===== #}
-{% if sections.msp_specific_analysis %}
+{# ===== FINAL BINDING RECOMMENDATION ===== #}
 <div class="section page-break">
-    <h1>13. Industry-Specific Considerations</h1>
-    <div class="section-content">
-        {{ sections.msp_specific_analysis | replace('\n', '<br>') }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== REGULATORY COMPLIANCE ===== #}
-{% if sections.regulatory_compliance %}
-<div class="section page-break">
-    <h1>14. Compliance & Regulatory Considerations</h1>
-    <div class="section-content">
-        {{ sections.regulatory_compliance | replace('\n', '<br>') }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== RECOMMENDATIONS ===== #}
-<div class="section page-break">
-    <h1>15. Recommendations & Implementation Roadmap</h1>
-    <div class="section-content">
-        {{ sections.recommendations | replace('\n', '<br>') }}
-    </div>
-</div>
-
-{# ===== BINDING RECOMMENDATION ===== #}
-<div class="section page-break">
-    <h1>16. Final Binding Recommendation</h1>
+    <h1>Final Recommendation</h1>
 
     <div class="binding-rec {{ rec_class.get(binding_recommendation, 'binding-rec-conditions') }}">
-        <div class="binding-rec-title">{{ binding_recommendation | upper }}</div>
+        <div class="binding-rec-title">Recommended Action: {{ binding_recommendation }}</div>
         <div class="binding-rec-rationale">{{ binding_rationale }}</div>
     </div>
 
-    {% if sections.binding_recommendation %}
+    {% if sections.final_recommendation_detail %}
     <div class="section-content">
-        {{ sections.binding_recommendation | replace('\n', '<br>') }}
+        {{ sections.final_recommendation_detail | md_to_html }}
+    </div>
+    {% elif sections.binding_recommendation %}
+    <div class="section-content">
+        {{ sections.binding_recommendation | md_to_html }}
     </div>
     {% endif %}
 </div>
 
-{# ===== ADDITIONAL SECTIONS ===== #}
+{# ===== ADDITIONAL ANALYSIS SECTIONS ===== #}
+{% if sections.policy_terms_analysis %}
+<div class="section page-break">
+    <h1>Policy Terms &amp; Critical Features</h1>
+    <div class="section-content">
+        {{ sections.policy_terms_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
 {% if sections.incident_response_evaluation %}
 <div class="section page-break">
-    <h1>17. Incident Response Evaluation</h1>
+    <h1>Incident Response Evaluation</h1>
     <div class="section-content">
-        {{ sections.incident_response_evaluation | replace('\n', '<br>') }}
+        {{ sections.incident_response_evaluation | md_to_html }}
     </div>
 </div>
 {% endif %}
 
 {% if sections.business_interruption_analysis %}
 <div class="section">
-    <h1>18. Business Interruption Analysis</h1>
+    <h1>Business Interruption Analysis</h1>
     <div class="section-content">
-        {{ sections.business_interruption_analysis | replace('\n', '<br>') }}
+        {{ sections.business_interruption_analysis | md_to_html }}
     </div>
 </div>
 {% endif %}
 
 {% if sections.social_engineering_analysis %}
 <div class="section">
-    <h1>19. Social Engineering Analysis</h1>
+    <h1>Social Engineering Analysis</h1>
     <div class="section-content">
-        {{ sections.social_engineering_analysis | replace('\n', '<br>') }}
+        {{ sections.social_engineering_analysis | md_to_html }}
     </div>
 </div>
 {% endif %}
 
 {% if sections.vendor_dependency_analysis %}
 <div class="section">
-    <h1>20. Vendor & Dependency Analysis</h1>
+    <h1>Vendor &amp; Dependency Analysis</h1>
     <div class="section-content">
-        {{ sections.vendor_dependency_analysis | replace('\n', '<br>') }}
+        {{ sections.vendor_dependency_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{% if sections.regulatory_compliance %}
+<div class="section page-break">
+    <h1>Compliance &amp; Regulatory Considerations</h1>
+    <div class="section-content">
+        {{ sections.regulatory_compliance | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{% if sections.msp_specific_analysis %}
+<div class="section page-break">
+    <h1>Industry-Specific Considerations</h1>
+    <div class="section-content">
+        {{ sections.msp_specific_analysis | md_to_html }}
     </div>
 </div>
 {% endif %}
 
 {# ===== DOCUMENT CONTROL ===== #}
 <div class="section page-break">
-    <h1>21. Document Control</h1>
+    <h1>Document Control</h1>
     <table>
         <thead><tr><th>Field</th><th>Details</th></tr></thead>
         <tbody>
-            <tr><td><strong>Document Title</strong></td><td>Cyber Insurance Policy Analysis</td></tr>
+            <tr><td><strong>Document Title</strong></td><td>Cyber Insurance Due Diligence Report</td></tr>
             <tr><td><strong>Client</strong></td><td>{{ metadata.named_insured or 'N/A' }}</td></tr>
             <tr><td><strong>Version</strong></td><td>1.0</td></tr>
             <tr><td><strong>Generated</strong></td><td>{{ generation_date }}</td></tr>
             <tr><td><strong>Classification</strong></td><td>Confidential — Client Use Only</td></tr>
-            <tr><td><strong>Prepared By</strong></td><td>RhôneRisk Advisory (Automated Analysis)</td></tr>
+            <tr><td><strong>Prepared By</strong></td><td>RhôneRisk Advisory</td></tr>
         </tbody>
     </table>
 </div>
 
 {# ===== CONFIDENTIALITY NOTICE ===== #}
 <div class="confidentiality-notice">
-    This document contains confidential and proprietary information. It is intended solely for the use of the
-    individual or entity to whom it is addressed. If you are not the intended recipient, you are hereby notified
-    that any disclosure, copying, distribution, or taking of any action in reliance on the contents of this
-    information is strictly prohibited.
+    This comprehensive due diligence report was prepared by RhôneRisk Advisory for {{ metadata.named_insured or 'the client' }}.<br>
+    Report Date: {{ generation_date }}{% if metadata.effective_date %} | Policy Analysis Period: {{ metadata.effective_date }}{% if metadata.expiration_date %} — {{ metadata.expiration_date }}{% endif %}{% endif %}<br><br>
+    This report is based on policy documents provided and represents our professional analysis and recommendations.
+    Final coverage determinations are subject to policy terms, conditions, and exclusions.
+    This report should not be construed as legal advice. Consult with legal counsel regarding specific coverage questions or policy interpretations.<br><br>
+    &copy; 2025 RhôneRisk Advisory. All rights reserved. | Confidential and Proprietary
 </div>
 
 </body>

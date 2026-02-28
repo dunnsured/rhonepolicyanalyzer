@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from app.models.scoring import CoverageScore, PolicyMetadata
+from app.models.scoring import CoverageScore, CategorySummary, StrategicRecommendation, PolicyMetadata
 
 
 class AnalysisStatusResponse(BaseModel):
@@ -21,6 +21,8 @@ class AnalysisSummaryResponse(BaseModel):
     coverage_scores: list[CoverageScore]
     red_flag_count: int
     critical_gaps: list[str]
+    category_summaries: list[CategorySummary] = []
+    strategic_recommendations: list[StrategicRecommendation] = []
     report_pdf_url: str | None = None
 
 

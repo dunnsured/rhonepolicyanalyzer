@@ -50,9 +50,9 @@ class AnalysisEngine:
         Pipeline stages:
         1. EXTRACT - PDF to markdown + tables
         2. PARSE - Extract structured metadata
-        3. ANALYZE (Call 1) - Score all coverages
+        3. ANALYZE (Call 1) - Score all coverages with detailed analysis
         4. POST-PROCESS - Apply red flag penalties, calculate overall score
-        5. ANALYZE (Call 2) - Generate report narrative
+        5. ANALYZE (Call 2) - Generate report narrative with strategic recs
         6. GENERATE - Create branded PDF report
 
         Args:
@@ -132,14 +132,14 @@ class AnalysisEngine:
         if record:
             record.end_stage("parsing")
 
-        # Step 3: ANALYZE - Call 1 (Coverage Scoring)
-        _log("INFO", "scoring", f"[{analysis_id}] Step 3: Scoring coverages (API Call 1)")
+        # Step 3: ANALYZE - Call 1 (Coverage Scoring with detailed analysis)
+        _log("INFO", "scoring", f"[{analysis_id}] Step 3: Scoring coverages with detailed analysis (API Call 1)")
         if record:
             record.start_stage("scoring")
         _report_progress("scoring", 35)
 
         try:
-            coverage_scores, scoring_usage = self.claude.score_coverages(
+            coverage_scores, category_summaries, scoring_usage = self.claude.score_coverages(
                 policy_text=md_text,
                 tables_text=tables_text,
                 metadata_context=metadata_context,
@@ -155,6 +155,8 @@ class AnalysisEngine:
             _log("ERROR", "scoring", f"Coverage scoring failed: {e}\n{traceback.format_exc()}")
             raise
 
+        _log("INFO", "scoring",
+             f"[{analysis_id}] Scored {len(coverage_scores)} coverages, {len(category_summaries)} category summaries")
         _report_progress("scoring", 50)
         if record:
             record.end_stage("scoring")
@@ -191,7 +193,7 @@ class AnalysisEngine:
         if record:
             record.end_stage("post_processing")
 
-        # Step 5: ANALYZE - Call 2 (Report Narrative)
+        # Step 5: ANALYZE - Call 2 (Report Narrative with strategic recs)
         _log("INFO", "generating_narrative", f"[{analysis_id}] Step 5: Generating report narrative (API Call 2)")
         if record:
             record.start_stage("generating_narrative")
@@ -201,7 +203,7 @@ class AnalysisEngine:
             client_context = format_client_context(client_info)
             scores_context = format_scores_context(coverage_scores)
 
-            report_sections, narrative_usage = self.claude.generate_report_narrative(
+            report_sections, strategic_recs, narrative_usage = self.claude.generate_report_narrative(
                 policy_text=md_text,
                 tables_text=tables_text,
                 metadata_context=metadata_context,
@@ -242,6 +244,8 @@ class AnalysisEngine:
                 report_sections=report_sections,
                 red_flag_count=red_flag_count,
                 critical_gaps=critical_gaps,
+                category_summaries=category_summaries,
+                strategic_recommendations=strategic_recs,
             )
 
             if output_dir is None:

@@ -352,6 +352,8 @@ async def get_analysis(analysis_id: str):
         coverage_scores=analysis.coverage_scores,
         red_flag_count=analysis.red_flag_count,
         critical_gaps=analysis.critical_gaps,
+        category_summaries=analysis.category_summaries or [],
+        strategic_recommendations=analysis.strategic_recommendations or [],
         report_pdf_url=report_url,
     )
 
