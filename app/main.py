@@ -1,7 +1,9 @@
 """FastAPI application for RhôneRisk Cyber Insurance Policy Analyzer."""
 
+import asyncio
 import logging
 import shutil
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -11,36 +13,31 @@ from typing import Annotated
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import StreamingResponse
 
 from app.analysis.engine import AnalysisEngine
 from app.config import get_settings
 from app.models.requests import ClientInfo
 from app.models.responses import AnalysisSummaryResponse, AnalysisStatusResponse, HealthResponse
 from app.models.scoring import PolicyAnalysis
+from app.monitoring import registry
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-memory stores
 # ---------------------------------------------------------------------------
-# Analysis results keyed by analysis_id
 _analyses: dict[str, PolicyAnalysis] = {}
-
-# Status tracking keyed by analysis_id
 _analysis_status: dict[str, AnalysisStatusResponse] = {}
-
-# R2 bucket paths for generated report PDFs keyed by analysis_id
 _report_r2_paths: dict[str, str] = {}
-
-# R2 bucket paths for uploaded policy PDFs keyed by analysis_id
 _policy_r2_paths: dict[str, str] = {}
-
-# Fallback: local report paths (used when R2 is not configured)
 _report_paths: dict[str, Path] = {}
+
+# Track start times for elapsed time display
+_analysis_start_times: dict[str, float] = {}
 
 
 def _validate_knowledge_base() -> bool:
-    """Check that all knowledge base files exist."""
     settings = get_settings()
     required = [
         settings.knowledge_dir / "system_prompt.md",
@@ -53,13 +50,11 @@ def _validate_knowledge_base() -> bool:
 
 
 def _r2_configured() -> bool:
-    """Check whether R2 credentials are set."""
     settings = get_settings()
     return bool(settings.r2_account_id and settings.r2_access_key_id and settings.r2_secret_access_key)
 
 
 def _get_r2_client():
-    """Lazily import and instantiate the R2 storage client."""
     from app.storage.r2 import R2StorageClient
     return R2StorageClient()
 
@@ -74,15 +69,10 @@ def _run_analysis_background(
     client_info: ClientInfo,
     pdf_dir: Path,
 ) -> None:
-    """Execute the analysis pipeline in a background thread.
-
-    Updates the in-memory status dict at each pipeline stage and
-    uploads the final report PDF to R2 on completion.
-    """
     settings = get_settings()
+    record = registry.get(analysis_id)
 
     def progress_callback(status: str, progress: int) -> None:
-        """Update the in-memory status tracker."""
         _analysis_status[analysis_id] = AnalysisStatusResponse(
             analysis_id=analysis_id,
             status=status,
@@ -90,7 +80,6 @@ def _run_analysis_background(
         )
 
     try:
-        # Set initial status
         progress_callback("extracting", 10)
 
         engine = AnalysisEngine()
@@ -102,19 +91,17 @@ def _run_analysis_background(
             client_info=client_info,
             output_dir=output_dir,
             progress_callback=progress_callback,
+            record=record,
         )
 
-        # Store analysis results
         _analyses[analysis_id] = analysis
 
-        # Find the generated report PDF
         report_pdf_path: Path | None = None
         if output_dir.exists():
             pdfs = sorted(output_dir.glob("RhoneRisk_Analysis_*"), key=lambda p: p.stat().st_mtime)
             if pdfs:
                 report_pdf_path = pdfs[-1]
 
-        # Upload report PDF to R2 if configured
         if report_pdf_path and report_pdf_path.exists() and _r2_configured():
             try:
                 r2 = _get_r2_client()
@@ -128,7 +115,6 @@ def _run_analysis_background(
         elif report_pdf_path and report_pdf_path.exists():
             _report_paths[analysis_id] = report_pdf_path
 
-        # Final status: completed
         _analysis_status[analysis_id] = AnalysisStatusResponse(
             analysis_id=analysis_id,
             status="completed",
@@ -143,9 +129,10 @@ def _run_analysis_background(
             progress=0,
             error=str(e),
         )
+        if record:
+            record.mark_failed(str(e))
 
     finally:
-        # Clean up uploaded PDF directory
         shutil.rmtree(pdf_dir, ignore_errors=True)
 
 
@@ -155,25 +142,18 @@ def _run_analysis_background(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events."""
     settings = get_settings()
-
-    # Configure logging
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper()),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-
-    # Create temp directory
     settings.temp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Validate knowledge base
     if not _validate_knowledge_base():
         logger.error("Knowledge base files missing! Check app/knowledge/ directory.")
     else:
         logger.info("Knowledge base validated successfully.")
 
-    # Log R2 configuration status
     if _r2_configured():
         logger.info("R2 storage configured (bucket: %s)", settings.r2_bucket_name)
     else:
@@ -204,7 +184,6 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 @app.get("/api/v1/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint."""
     return HealthResponse(
         status="ok",
         version="0.1.0",
@@ -223,19 +202,11 @@ async def analyze_policy(
     is_msp: Annotated[bool, Form()] = False,
     notes: Annotated[str, Form()] = "",
 ):
-    """Submit a cyber insurance policy PDF for analysis.
-
-    Returns HTTP 202 immediately with an analysis_id. The analysis
-    runs asynchronously in the background. Poll
-    ``GET /api/v1/analyze/{id}/status`` for progress.
-    """
     settings = get_settings()
 
-    # Validate file type
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
-    # Validate file size
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(
@@ -243,16 +214,13 @@ async def analyze_policy(
             detail=f"File too large. Maximum size: {settings.max_upload_size_mb}MB.",
         )
 
-    # Generate analysis ID
     analysis_id = uuid.uuid4().hex[:12]
 
-    # Save PDF to local temp directory for the background task
     pdf_dir = settings.temp_dir / "uploads" / analysis_id
     pdf_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = pdf_dir / file.filename
     pdf_path.write_bytes(content)
 
-    # Upload policy PDF to R2 if configured
     if _r2_configured():
         try:
             r2 = _get_r2_client()
@@ -262,7 +230,6 @@ async def analyze_policy(
         except Exception as e:
             logger.warning("[%s] Failed to upload policy PDF to R2: %s", analysis_id, e)
 
-    # Build client info
     client_info = ClientInfo(
         client_name=client_name,
         industry=industry,
@@ -272,14 +239,24 @@ async def analyze_policy(
         notes=notes,
     )
 
-    # Set initial status
+    # Create monitoring record
+    record = registry.create(
+        analysis_id=analysis_id,
+        client_name=client_name or "Unknown",
+        filename=file.filename,
+        file_size_bytes=len(content),
+    )
+    record.add_log("INFO", "upload", f"Received {file.filename} ({len(content) / 1024:.0f} KB)")
+
+    # Track start time for elapsed display
+    _analysis_start_times[analysis_id] = time.time()
+
     _analysis_status[analysis_id] = AnalysisStatusResponse(
         analysis_id=analysis_id,
         status="pending",
         progress=0,
     )
 
-    # Schedule background analysis
     background_tasks.add_task(
         _run_analysis_background,
         analysis_id=analysis_id,
@@ -299,17 +276,20 @@ async def analyze_policy(
 
 @app.get("/api/v1/analyze/{analysis_id}/status", response_model=AnalysisStatusResponse)
 async def get_analysis_status(analysis_id: str):
-    """Poll for analysis progress.
-
-    Returns the current pipeline stage and progress percentage.
-    When status is ``completed``, the report is ready for download.
-    """
     if analysis_id not in _analysis_status:
         raise HTTPException(status_code=404, detail="Analysis not found.")
 
     status = _analysis_status[analysis_id]
 
-    # If completed, include report URL and summary info
+    # Calculate elapsed time
+    elapsed_seconds = 0.0
+    if analysis_id in _analysis_start_times:
+        if status.status in ("completed", "failed"):
+            record = registry.get(analysis_id)
+            elapsed_seconds = record.total_duration_seconds if record else 0.0
+        else:
+            elapsed_seconds = time.time() - _analysis_start_times[analysis_id]
+
     if status.status == "completed" and analysis_id in _analyses:
         analysis = _analyses[analysis_id]
         report_url = f"/api/v1/analyze/{analysis_id}/report" if (
@@ -324,16 +304,21 @@ async def get_analysis_status(analysis_id: str):
             "overall_rating": analysis.overall_rating,
             "binding_recommendation": analysis.binding_recommendation,
             "report_url": report_url,
+            "elapsed_seconds": round(elapsed_seconds, 1),
         })
 
-    return status
+    return JSONResponse(content={
+        "analysis_id": status.analysis_id,
+        "status": status.status,
+        "progress": status.progress,
+        "error": status.error,
+        "elapsed_seconds": round(elapsed_seconds, 1),
+    })
 
 
 @app.get("/api/v1/analyze/{analysis_id}")
 async def get_analysis(analysis_id: str):
-    """Get full analysis results by ID."""
     if analysis_id not in _analyses:
-        # Check if it's still in progress
         if analysis_id in _analysis_status:
             status = _analysis_status[analysis_id]
             if status.status in ("pending", "extracting", "parsing", "scoring",
@@ -373,12 +358,6 @@ async def get_analysis(analysis_id: str):
 
 @app.get("/api/v1/analyze/{analysis_id}/report")
 async def download_report(analysis_id: str):
-    """Download the generated PDF report.
-
-    If R2 is configured, returns a 302 redirect to a pre-signed R2 URL
-    (valid for 1 hour). Otherwise, serves the file directly from local storage.
-    """
-    # Try R2 first
     if analysis_id in _report_r2_paths and _r2_configured():
         try:
             r2 = _get_r2_client()
@@ -387,7 +366,6 @@ async def download_report(analysis_id: str):
         except Exception as e:
             logger.warning("[%s] Failed to generate R2 signed URL: %s", analysis_id, e)
 
-    # Fallback to local file
     if analysis_id in _report_paths:
         report_path = _report_paths[analysis_id]
         if report_path.exists():
@@ -397,7 +375,6 @@ async def download_report(analysis_id: str):
                 filename=report_path.name,
             )
 
-    # Check if analysis is still running
     if analysis_id in _analysis_status:
         status = _analysis_status[analysis_id]
         if status.status not in ("completed", "failed"):
@@ -412,10 +389,75 @@ async def download_report(analysis_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Monitoring endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/analyses")
+async def list_analyses():
+    """Return all analysis records with timing breakdowns."""
+    return JSONResponse(content={"analyses": registry.list_all()})
+
+
+@app.get("/api/v1/analyze/{analysis_id}/logs")
+async def stream_logs(analysis_id: str):
+    """Server-Sent Events endpoint for real-time log streaming."""
+    record = registry.get(analysis_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Analysis not found.")
+
+    async def event_generator():
+        import json
+
+        # First, send all existing logs as a burst
+        for entry in record.logs:
+            yield entry.to_sse()
+
+        # If already completed or failed, close the stream
+        if record.status in ("completed", "failed"):
+            yield f"data: {json.dumps({'type': 'close', 'status': record.status})}\n\n"
+            return
+
+        # Subscribe for real-time updates
+        queue = record.subscribe()
+        try:
+            while True:
+                try:
+                    entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    if entry is None:
+                        # Sentinel: analysis finished
+                        yield f"data: {json.dumps({'type': 'close', 'status': record.status})}\n\n"
+                        return
+                    yield entry.to_sse()
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+        finally:
+            record.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/v1/analyze/{analysis_id}/timing")
+async def get_analysis_timing(analysis_id: str):
+    """Get detailed timing breakdown for a specific analysis."""
+    record = registry.get(analysis_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Analysis not found.")
+    return JSONResponse(content=record.to_dict())
+
+
+# ---------------------------------------------------------------------------
 # Frontend catch-all (must be last)
 # ---------------------------------------------------------------------------
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
-    """Serve the SPA index.html for all non-API routes."""
     return FileResponse(str(_STATIC_DIR / "index.html"), media_type="text/html")

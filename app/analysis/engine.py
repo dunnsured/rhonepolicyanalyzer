@@ -1,6 +1,7 @@
 """Analysis engine: orchestrates the full policy analysis pipeline."""
 
 import logging
+import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from app.etl.extractor import extract_policy, format_tables_for_context
 from app.etl.parser import parse_metadata
 from app.models.requests import ClientInfo
 from app.models.scoring import PolicyAnalysis, PolicyMetadata, ReportSections
+from app.monitoring import AnalysisRecord
 from app.report.generator import generate_pdf_report
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class AnalysisEngine:
         client_info: ClientInfo | None = None,
         output_dir: Path | None = None,
         progress_callback: Optional[ProgressCallback] = None,
+        record: Optional[AnalysisRecord] = None,
     ) -> PolicyAnalysis:
         """Run the complete analysis pipeline on a policy PDF.
 
@@ -58,6 +61,7 @@ class AnalysisEngine:
             output_dir: Directory for generated report PDF. Defaults to temp dir.
             progress_callback: Optional callback invoked at each pipeline stage
                 with (status_string, progress_percentage).
+            record: Optional AnalysisRecord for monitoring/timing.
 
         Returns:
             Complete PolicyAnalysis with scores, narrative, and report path.
@@ -73,95 +77,195 @@ class AnalysisEngine:
                 except Exception as e:
                     logger.warning("Progress callback failed: %s", e)
 
-        logger.info("Starting analysis %s for %s", analysis_id, pdf_path.name)
+        def _log(level: str, stage: str, msg: str) -> None:
+            """Log to both Python logger and monitoring record."""
+            getattr(logger, level.lower(), logger.info)(msg)
+            if record:
+                record.add_log(level, stage, msg)
+
+        _log("INFO", "pipeline", f"Starting analysis {analysis_id} for {pdf_path.name}")
+        if record:
+            record.mark_started()
 
         # Step 1: EXTRACT
-        logger.info("[%s] Step 1: Extracting PDF", analysis_id)
+        _log("INFO", "extracting", f"[{analysis_id}] Step 1: Extracting PDF")
+        if record:
+            record.start_stage("extracting")
         _report_progress("extracting", 15)
-        md_text, tables = extract_policy(pdf_path)
-        tables_text = format_tables_for_context(tables)
-        logger.info("[%s] Extracted %d chars, %d tables", analysis_id, len(md_text), len(tables))
+
+        try:
+            md_text, tables = extract_policy(pdf_path)
+            tables_text = format_tables_for_context(tables)
+        except Exception as e:
+            _log("ERROR", "extracting", f"PDF extraction failed: {e}\n{traceback.format_exc()}")
+            raise
+
+        _log("INFO", "extracting", f"[{analysis_id}] Extracted {len(md_text)} chars, {len(tables)} tables")
+
+        # Try to get page count
+        try:
+            import pdfplumber
+            with pdfplumber.open(pdf_path) as pdf:
+                page_count = len(pdf.pages)
+                if record:
+                    record.page_count = page_count
+                _log("INFO", "extracting", f"[{analysis_id}] PDF has {page_count} pages")
+        except Exception:
+            pass
+
+        if record:
+            record.end_stage("extracting")
 
         # Step 2: PARSE
-        logger.info("[%s] Step 2: Parsing metadata", analysis_id)
+        _log("INFO", "parsing", f"[{analysis_id}] Step 2: Parsing metadata")
+        if record:
+            record.start_stage("parsing")
         _report_progress("parsing", 25)
-        metadata = parse_metadata(md_text)
-        metadata_context = format_metadata_context(metadata)
+
+        try:
+            metadata = parse_metadata(md_text)
+            metadata_context = format_metadata_context(metadata)
+        except Exception as e:
+            _log("ERROR", "parsing", f"Metadata parsing failed: {e}\n{traceback.format_exc()}")
+            raise
+
+        if record:
+            record.end_stage("parsing")
 
         # Step 3: ANALYZE - Call 1 (Coverage Scoring)
-        logger.info("[%s] Step 3: Scoring coverages (API Call 1)", analysis_id)
+        _log("INFO", "scoring", f"[{analysis_id}] Step 3: Scoring coverages (API Call 1)")
+        if record:
+            record.start_stage("scoring")
         _report_progress("scoring", 35)
-        coverage_scores = self.claude.score_coverages(
-            policy_text=md_text,
-            tables_text=tables_text,
-            metadata_context=metadata_context,
-        )
+
+        try:
+            coverage_scores, scoring_usage = self.claude.score_coverages(
+                policy_text=md_text,
+                tables_text=tables_text,
+                metadata_context=metadata_context,
+            )
+            if record and scoring_usage:
+                record.scoring_input_tokens = scoring_usage.get("input_tokens", 0)
+                record.scoring_output_tokens = scoring_usage.get("output_tokens", 0)
+                _log("INFO", "scoring",
+                     f"[{analysis_id}] Scoring API: {scoring_usage.get('input_tokens', 0)} input, "
+                     f"{scoring_usage.get('output_tokens', 0)} output tokens, "
+                     f"{scoring_usage.get('duration_seconds', 0):.1f}s")
+        except Exception as e:
+            _log("ERROR", "scoring", f"Coverage scoring failed: {e}\n{traceback.format_exc()}")
+            raise
+
         _report_progress("scoring", 50)
+        if record:
+            record.end_stage("scoring")
 
         # Step 4: POST-PROCESS
-        logger.info("[%s] Step 4: Post-processing scores", analysis_id)
+        _log("INFO", "post_processing", f"[{analysis_id}] Step 4: Post-processing scores")
+        if record:
+            record.start_stage("post_processing")
         _report_progress("post_processing", 60)
-        coverage_scores = apply_red_flag_penalties(coverage_scores)
-        overall_score, overall_rating = calculate_overall_score(coverage_scores)
 
-        # Collect red flags and critical gaps
-        all_red_flags = []
-        critical_gaps = []
-        for s in coverage_scores:
-            all_red_flags.extend(s.red_flags)
-            if s.score <= 1:
-                critical_gaps.append(f"{s.coverage_name}: {s.rating} ({s.score}/10)")
+        try:
+            coverage_scores = apply_red_flag_penalties(coverage_scores)
+            overall_score, overall_rating = calculate_overall_score(coverage_scores)
 
-        red_flag_count = len(set(all_red_flags))
-        binding_rec, binding_rationale = determine_binding_recommendation(
-            overall_score, red_flag_count, critical_gaps,
-        )
+            all_red_flags = []
+            critical_gaps = []
+            for s in coverage_scores:
+                all_red_flags.extend(s.red_flags)
+                if s.score <= 1:
+                    critical_gaps.append(f"{s.coverage_name}: {s.rating} ({s.score}/10)")
+
+            red_flag_count = len(set(all_red_flags))
+            binding_rec, binding_rationale = determine_binding_recommendation(
+                overall_score, red_flag_count, critical_gaps,
+            )
+            _log("INFO", "post_processing",
+                 f"[{analysis_id}] Score: {overall_score:.1f} ({overall_rating}), "
+                 f"{red_flag_count} red flags, {len(critical_gaps)} critical gaps, "
+                 f"Recommendation: {binding_rec}")
+        except Exception as e:
+            _log("ERROR", "post_processing", f"Post-processing failed: {e}\n{traceback.format_exc()}")
+            raise
+
+        if record:
+            record.end_stage("post_processing")
 
         # Step 5: ANALYZE - Call 2 (Report Narrative)
-        logger.info("[%s] Step 5: Generating report narrative (API Call 2)", analysis_id)
+        _log("INFO", "generating_narrative", f"[{analysis_id}] Step 5: Generating report narrative (API Call 2)")
+        if record:
+            record.start_stage("generating_narrative")
         _report_progress("generating_narrative", 70)
-        client_context = format_client_context(client_info)
-        scores_context = format_scores_context(coverage_scores)
 
-        report_sections = self.claude.generate_report_narrative(
-            policy_text=md_text,
-            tables_text=tables_text,
-            metadata_context=metadata_context,
-            scores_context=scores_context,
-            client_context=client_context,
-        )
+        try:
+            client_context = format_client_context(client_info)
+            scores_context = format_scores_context(coverage_scores)
+
+            report_sections, narrative_usage = self.claude.generate_report_narrative(
+                policy_text=md_text,
+                tables_text=tables_text,
+                metadata_context=metadata_context,
+                scores_context=scores_context,
+                client_context=client_context,
+            )
+            if record and narrative_usage:
+                record.narrative_input_tokens = narrative_usage.get("input_tokens", 0)
+                record.narrative_output_tokens = narrative_usage.get("output_tokens", 0)
+                _log("INFO", "generating_narrative",
+                     f"[{analysis_id}] Narrative API: {narrative_usage.get('input_tokens', 0)} input, "
+                     f"{narrative_usage.get('output_tokens', 0)} output tokens, "
+                     f"{narrative_usage.get('duration_seconds', 0):.1f}s")
+        except Exception as e:
+            _log("ERROR", "generating_narrative", f"Narrative generation failed: {e}\n{traceback.format_exc()}")
+            raise
+
         _report_progress("generating_narrative", 80)
+        if record:
+            record.end_stage("generating_narrative")
 
         # Step 6: GENERATE PDF Report
-        logger.info("[%s] Step 6: Generating PDF report", analysis_id)
+        _log("INFO", "generating_report", f"[{analysis_id}] Step 6: Generating PDF report")
+        if record:
+            record.start_stage("generating_report")
         _report_progress("generating_report", 90)
-        analysis = PolicyAnalysis(
-            analysis_id=analysis_id,
-            status="completed",
-            policy_metadata=metadata,
-            coverage_scores=coverage_scores,
-            overall_score=overall_score,
-            overall_rating=overall_rating,
-            binding_recommendation=binding_rec,
-            binding_rationale=binding_rationale,
-            report_sections=report_sections,
-            red_flag_count=red_flag_count,
-            critical_gaps=critical_gaps,
-        )
 
-        if output_dir is None:
-            from app.config import get_settings
-            output_dir = get_settings().temp_dir / "reports"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            analysis = PolicyAnalysis(
+                analysis_id=analysis_id,
+                status="completed",
+                policy_metadata=metadata,
+                coverage_scores=coverage_scores,
+                overall_score=overall_score,
+                overall_rating=overall_rating,
+                binding_recommendation=binding_rec,
+                binding_rationale=binding_rationale,
+                report_sections=report_sections,
+                red_flag_count=red_flag_count,
+                critical_gaps=critical_gaps,
+            )
 
-        client_name = client_info.client_name or metadata.named_insured or "Unknown"
-        safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in client_name).strip()
-        date_str = datetime.now().strftime("%Y%m%d")
-        pdf_filename = f"RhoneRisk_Analysis_{safe_name}_{date_str}.pdf"
-        pdf_path_out = output_dir / pdf_filename
+            if output_dir is None:
+                from app.config import get_settings
+                output_dir = get_settings().temp_dir / "reports"
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        generate_pdf_report(analysis, pdf_path_out)
-        logger.info("[%s] Analysis complete. Report: %s", analysis_id, pdf_path_out)
+            client_name = client_info.client_name or metadata.named_insured or "Unknown"
+            safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in client_name).strip()
+            date_str = datetime.now().strftime("%Y%m%d")
+            pdf_filename = f"RhoneRisk_Analysis_{safe_name}_{date_str}.pdf"
+            pdf_path_out = output_dir / pdf_filename
+
+            generate_pdf_report(analysis, pdf_path_out)
+            report_size = pdf_path_out.stat().st_size / 1024
+            _log("INFO", "generating_report",
+                 f"[{analysis_id}] Report generated: {pdf_filename} ({report_size:.0f} KB)")
+        except Exception as e:
+            _log("ERROR", "generating_report", f"PDF report generation failed: {e}\n{traceback.format_exc()}")
+            raise
+
+        if record:
+            record.end_stage("generating_report")
+            record.mark_completed()
 
         _report_progress("completed", 100)
 

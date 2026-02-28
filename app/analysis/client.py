@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+import traceback
 from pathlib import Path
 
 import anthropic
@@ -152,18 +153,17 @@ class ClaudeClient:
         tools: list[dict],
         tool_choice: dict,
         max_retries: int = 3,
-    ) -> anthropic.types.Message:
+    ) -> tuple[anthropic.types.Message, dict]:
         """Make an API call with exponential backoff retry.
 
-        Extended thinking is incompatible with forced tool_choice in the
-        Anthropic API, and also causes long timeouts on large inputs.
-        We therefore disable thinking for tool-use calls and rely on the
-        model's native reasoning ability, which is more than sufficient
-        for structured policy analysis.  Forced tool_choice guarantees
-        the model returns structured output via the specified tool.
+        Returns a tuple of (response, usage_dict) where usage_dict contains
+        input_tokens, output_tokens, and duration_seconds.
         """
         for attempt in range(max_retries):
+            call_start = time.time()
             try:
+                logger.info("Claude API call attempt %d/%d (model=%s, max_tokens=%d)",
+                            attempt + 1, max_retries, self.model, self.max_tokens)
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=self.max_tokens,
@@ -172,29 +172,46 @@ class ClaudeClient:
                     tools=tools,
                     tool_choice=tool_choice,
                 )
+                call_duration = time.time() - call_start
+                usage = {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                    "duration_seconds": round(call_duration, 2),
+                }
                 logger.info(
-                    "API call succeeded: %d input tokens, %d output tokens",
+                    "API call succeeded in %.1fs: %d input tokens, %d output tokens",
+                    call_duration,
                     response.usage.input_tokens,
                     response.usage.output_tokens,
                 )
-                return response
-            except anthropic.RateLimitError:
+                return response, usage
+            except anthropic.RateLimitError as e:
+                call_duration = time.time() - call_start
                 wait = 2 ** attempt * 5
-                logger.warning("Rate limited, waiting %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                logger.warning("Rate limited after %.1fs, waiting %ds (attempt %d/%d): %s",
+                               call_duration, wait, attempt + 1, max_retries, e)
                 time.sleep(wait)
-            except anthropic.APIConnectionError:
+            except anthropic.APIConnectionError as e:
+                call_duration = time.time() - call_start
                 if attempt < max_retries - 1:
                     wait = 2 ** attempt * 3
-                    logger.warning("Connection error, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                    logger.warning("Connection error after %.1fs, retrying in %ds (attempt %d/%d): %s",
+                                   call_duration, wait, attempt + 1, max_retries, e)
                     time.sleep(wait)
                 else:
+                    logger.error("Connection error after %.1fs, all retries exhausted: %s\n%s",
+                                 call_duration, e, traceback.format_exc())
                     raise
             except anthropic.APIStatusError as e:
+                call_duration = time.time() - call_start
                 if e.status_code >= 500 and attempt < max_retries - 1:
                     wait = 2 ** attempt * 2
-                    logger.warning("Server error %d, retrying in %ds", e.status_code, wait)
+                    logger.warning("Server error %d after %.1fs, retrying in %ds: %s",
+                                   e.status_code, call_duration, wait, e)
                     time.sleep(wait)
                 else:
+                    logger.error("API error %d after %.1fs: %s\n%s",
+                                 e.status_code, call_duration, e, traceback.format_exc())
                     raise
         raise RuntimeError("Max retries exceeded for Claude API call")
 
@@ -205,16 +222,12 @@ class ClaudeClient:
                 return block.input
         raise ValueError("No tool_use block found in response")
 
-    def score_coverages(self, policy_text: str, tables_text: str, metadata_context: str) -> list[CoverageScore]:
+    def score_coverages(self, policy_text: str, tables_text: str,
+                        metadata_context: str) -> tuple[list[CoverageScore], dict]:
         """Call 1: Score all coverage types in a single API call.
 
-        Args:
-            policy_text: Full extracted markdown text from the policy.
-            tables_text: Formatted table data from pdfplumber.
-            metadata_context: Pre-parsed metadata as context string.
-
         Returns:
-            List of CoverageScore objects for each coverage found.
+            Tuple of (list of CoverageScore objects, usage dict with token counts and duration).
         """
         logger.info("Starting coverage scoring (Call 1)")
 
@@ -248,7 +261,7 @@ Use the submit_coverage_scores tool to return your complete analysis."""
 
         messages = [{"role": "user", "content": user_message}]
 
-        response = self._call_with_retry(
+        response, usage = self._call_with_retry(
             system=system,
             messages=messages,
             tools=[COVERAGE_SCORES_TOOL],
@@ -258,7 +271,7 @@ Use the submit_coverage_scores tool to return your complete analysis."""
         result = self._extract_tool_input(response)
         scores = [CoverageScore(**s) for s in result["coverage_scores"]]
         logger.info("Scored %d coverage types", len(scores))
-        return scores
+        return scores, usage
 
     def generate_report_narrative(
         self,
@@ -267,18 +280,11 @@ Use the submit_coverage_scores tool to return your complete analysis."""
         metadata_context: str,
         scores_context: str,
         client_context: str,
-    ) -> ReportSections:
+    ) -> tuple[ReportSections, dict]:
         """Call 2: Generate narrative content for all 21 report sections.
 
-        Args:
-            policy_text: Full extracted markdown text.
-            tables_text: Formatted table data.
-            metadata_context: Pre-parsed metadata.
-            scores_context: JSON summary of all coverage scores from Call 1.
-            client_context: Client information (name, industry, revenue, etc.).
-
         Returns:
-            ReportSections with narrative text for each section.
+            Tuple of (ReportSections, usage dict with token counts and duration).
         """
         logger.info("Starting report narrative generation (Call 2)")
 
@@ -322,7 +328,7 @@ Use the submit_report_narrative tool to return all section content."""
 
         messages = [{"role": "user", "content": user_message}]
 
-        response = self._call_with_retry(
+        response, usage = self._call_with_retry(
             system=system,
             messages=messages,
             tools=[REPORT_NARRATIVE_TOOL],
@@ -332,4 +338,4 @@ Use the submit_report_narrative tool to return all section content."""
         result = self._extract_tool_input(response)
         sections = ReportSections(**result)
         logger.info("Generated report narrative for %d sections", sum(1 for v in result.values() if v))
-        return sections
+        return sections, usage

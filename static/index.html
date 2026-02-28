@@ -19,6 +19,7 @@
     <div class="nav-links">
       <a href="/" data-view="home">Home</a>
       <a href="#analyze" data-view="analyze">Analyze</a>
+      <a href="#monitor" data-view="monitor">Monitor</a>
     </div>
   </div>
 </nav>
@@ -148,7 +149,7 @@
 <!-- ======== PROGRESS VIEW ======== -->
 <div id="view-progress" class="view">
   <section class="page-section">
-    <div class="container" style="max-width:600px">
+    <div class="container" style="max-width:640px">
       <div class="card fade-in">
         <div class="progress-container">
 
@@ -165,6 +166,7 @@
           </div>
 
           <div class="progress-stage" id="progress-stage">Pending</div>
+          <div class="progress-elapsed" id="progress-elapsed"></div>
           <div class="progress-detail" id="progress-detail">Preparing analysis…</div>
 
           <div style="margin-top:16px;font-size:13px;color:var(--gray-400)">
@@ -181,6 +183,15 @@
           </div>
 
         </div>
+      </div>
+
+      <!-- Live Log Viewer on Progress Page -->
+      <div class="card fade-in-delay" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="font-size:15px;font-weight:700;color:var(--navy)">Live Pipeline Logs</h3>
+          <span class="log-status-dot" id="log-status-dot"></span>
+        </div>
+        <div class="log-viewer" id="progress-log-viewer"></div>
       </div>
     </div>
   </section>
@@ -254,6 +265,100 @@
       <div style="display:flex;gap:16px;justify-content:center;padding:20px 0;flex-wrap:wrap">
         <button class="btn btn-primary btn-lg" id="download-btn">📥 Download PDF Report</button>
         <button class="btn btn-outline btn-lg" id="new-analysis-btn">+ New Analysis</button>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ======== MONITOR / DASHBOARD VIEW ======== -->
+<div id="view-monitor" class="view">
+  <section class="page-section">
+    <div class="container" style="max-width:1100px">
+      <h1 class="section-title">Monitoring Dashboard</h1>
+      <p class="section-subtitle">Pipeline performance, analysis history, and real-time log streaming.</p>
+
+      <!-- Summary Stats -->
+      <div class="monitor-stats" id="monitor-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Total Analyses</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-green" id="stat-completed">0</div>
+          <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-red" id="stat-failed">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-amber" id="stat-running">0</div>
+          <div class="stat-label">In Progress</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-avg-time">—</div>
+          <div class="stat-label">Avg. Duration</div>
+        </div>
+      </div>
+
+      <!-- Analysis History Table -->
+      <div class="card fade-in" style="margin-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy)">Analysis History</h3>
+          <button class="btn btn-sm btn-outline" id="refresh-history-btn">Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="monitor-table" id="history-table">
+            <thead>
+              <tr>
+                <th>Analysis ID</th>
+                <th>Client</th>
+                <th>File</th>
+                <th>Status</th>
+                <th>Total Time</th>
+                <th>Extract</th>
+                <th>Parse</th>
+                <th>Score (API)</th>
+                <th>Post-Proc</th>
+                <th>Narrative (API)</th>
+                <th>Report</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody"></tbody>
+          </table>
+        </div>
+        <div id="no-history" class="empty-state" style="display:none">
+          <p>No analyses yet. Submit a policy to get started.</p>
+        </div>
+      </div>
+
+      <!-- Live Log Viewer -->
+      <div class="card fade-in-delay" style="margin-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:12px">
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy)">Live Log Stream</h3>
+          <div style="display:flex;align-items:center;gap:12px">
+            <select class="form-select" id="log-analysis-select" style="width:auto;padding:6px 12px;font-size:13px">
+              <option value="">Select an analysis…</option>
+            </select>
+            <span class="log-status-dot" id="monitor-log-status-dot"></span>
+          </div>
+        </div>
+        <div class="log-viewer log-viewer-tall" id="monitor-log-viewer">
+          <div class="log-placeholder">Select an analysis above to view its logs.</div>
+        </div>
+      </div>
+
+      <!-- Expanded Detail Modal -->
+      <div class="detail-overlay" id="detail-overlay" style="display:none">
+        <div class="detail-modal">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h3 style="font-size:17px;font-weight:700;color:var(--navy)">Analysis Details</h3>
+            <button class="btn btn-sm btn-outline" id="close-detail-btn">Close</button>
+          </div>
+          <div id="detail-content"></div>
+        </div>
       </div>
 
     </div>
