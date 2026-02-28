@@ -568,7 +568,10 @@
         <td class="${pp.cls}">${pp.text}</td>
         <td class="${nar.cls}">${nar.text}</td>
         <td class="${rep.cls}">${rep.text}</td>
-        <td><button class="btn btn-sm btn-outline detail-btn" data-id="${a.analysis_id}">View</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-outline detail-btn" data-id="${a.analysis_id}">View</button>
+          ${a.status === 'completed' ? `<a href="/api/v1/analyze/${a.analysis_id}/report" download class="btn btn-sm btn-primary" style="margin-left:6px;text-decoration:none" title="Download PDF report">&#8595; PDF</a>` : ''}
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -644,6 +647,11 @@
       html += '<div class="detail-section"><h4>Error</h4>';
       html += `<div class="detail-error">${escapeHtml(data.error)}</div>`;
       html += '</div>';
+    }
+
+    // Download PDF button for completed analyses
+    if (data.status === 'completed') {
+      html += `<div style="margin-top:20px;text-align:center"><a href="/api/v1/analyze/${data.analysis_id}/report" download class="btn btn-primary" style="text-decoration:none">&#8595;&nbsp; Download PDF Report</a></div>`;
     }
 
     content.innerHTML = html;
