@@ -2,6 +2,7 @@
 
 All analysis endpoints are protected by local JWT authentication.
 Each user has an isolated environment — they only see their own analyses.
+Analysis metadata is persisted to Supabase (or SQLite fallback) via app.database.
 """
 
 import asyncio
@@ -11,7 +12,7 @@ import shutil
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -61,6 +62,15 @@ def _get_r2_client():
     return R2StorageClient()
 
 
+def _persist_analysis_update(analysis_id: str, **fields):
+    """Persist analysis metadata updates to the database (best-effort)."""
+    try:
+        from app.database import db
+        db.update_analysis(analysis_id, **fields)
+    except Exception as e:
+        logger.warning("[%s] Failed to persist analysis update: %s", analysis_id, e)
+
+
 # ---------------------------------------------------------------------------
 # Background analysis task (per-user)
 # ---------------------------------------------------------------------------
@@ -82,6 +92,7 @@ def _run_analysis_background(
             status=status,
             progress=progress,
         )
+        _persist_analysis_update(analysis_id, status=status)
 
     try:
         progress_callback("extracting", 10)
@@ -106,23 +117,50 @@ def _run_analysis_background(
             if pdfs:
                 report_pdf_path = pdfs[-1]
 
+        has_report = False
+        report_r2_key = None
+
         if report_pdf_path and report_pdf_path.exists() and _r2_configured():
             try:
                 r2 = _get_r2_client()
                 report_r2_key = f"reports/{user_id}/{analysis_id}/{report_pdf_path.name}"
                 r2.upload_file(report_r2_key, report_pdf_path.read_bytes())
                 store.report_r2_paths[analysis_id] = report_r2_key
+                has_report = True
                 logger.info("[%s] Report uploaded to R2: %s", analysis_id, report_r2_key)
             except Exception as e:
                 logger.warning("[%s] R2 upload failed, keeping local copy: %s", analysis_id, e)
                 store.report_paths[analysis_id] = report_pdf_path
+                has_report = True
         elif report_pdf_path and report_pdf_path.exists():
             store.report_paths[analysis_id] = report_pdf_path
+            has_report = True
 
         store.statuses[analysis_id] = AnalysisStatusResponse(
             analysis_id=analysis_id,
             status="completed",
             progress=100,
+        )
+
+        # Persist completed analysis metadata to database
+        completed_at = datetime.now(timezone.utc).isoformat()
+        _persist_analysis_update(
+            analysis_id,
+            status="completed",
+            overall_score=analysis.overall_score,
+            overall_rating=analysis.overall_rating,
+            binding_recommendation=analysis.binding_recommendation,
+            red_flag_count=analysis.red_flag_count,
+            critical_gap_count=len(analysis.critical_gaps) if analysis.critical_gaps else 0,
+            has_report=has_report,
+            report_r2_key=report_r2_key,
+            total_duration_seconds=record.total_duration_seconds if record else 0,
+            scoring_input_tokens=record.scoring_input_tokens if record else 0,
+            scoring_output_tokens=record.scoring_output_tokens if record else 0,
+            narrative_input_tokens=record.narrative_input_tokens if record else 0,
+            narrative_output_tokens=record.narrative_output_tokens if record else 0,
+            page_count=record.page_count if record else 0,
+            completed_at=completed_at,
         )
 
     except Exception as e:
@@ -135,6 +173,12 @@ def _run_analysis_background(
         )
         if record:
             record.mark_failed(str(e))
+        _persist_analysis_update(
+            analysis_id,
+            status="failed",
+            error=str(e),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     finally:
         shutil.rmtree(pdf_dir, ignore_errors=True)
@@ -163,7 +207,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("R2 storage not configured — reports will be stored locally only.")
 
-    logger.info("Local JWT authentication enabled (SQLite + bcrypt).")
+    # Log which database backend is active
+    from app.database import db
+    backend_name = type(db).__name__
+    logger.info("Database backend: %s", backend_name)
+    logger.info("Local JWT authentication enabled.")
     logger.info("RhôneRisk Policy Analyzer started. Model: %s", settings.claude_model)
     yield
     logger.info("RhôneRisk Policy Analyzer shutting down.")
@@ -172,7 +220,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RhôneRisk Cyber Insurance Policy Analyzer",
     description="AI-powered cyber insurance policy analysis with proprietary 21-section framework and 4-tier maturity scoring.",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -191,7 +239,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 async def health_check():
     return HealthResponse(
         status="ok",
-        version="0.3.0",
+        version="0.4.0",
         knowledge_base_loaded=_validate_knowledge_base(),
     )
 
@@ -366,6 +414,19 @@ async def analyze_policy(
         progress=0,
     )
 
+    # Persist analysis record to database
+    try:
+        from app.database import db
+        db.create_analysis(
+            analysis_id=analysis_id,
+            user_id=user.id,
+            client_name=client_name or "Unknown",
+            filename=file.filename,
+            file_size_bytes=len(content),
+        )
+    except Exception as e:
+        logger.warning("[%s] Failed to persist analysis to database: %s", analysis_id, e)
+
     background_tasks.add_task(
         _run_analysis_background,
         analysis_id=analysis_id,
@@ -521,14 +582,46 @@ async def download_report(analysis_id: str, user: AuthUser = Depends(get_current
 
 @app.get("/api/v1/analyses")
 async def list_analyses(user: AuthUser = Depends(get_current_user)):
-    """Return all analysis records for the authenticated user."""
+    """Return all analysis records for the authenticated user.
+
+    Merges in-memory monitoring data with persisted database records.
+    """
     store = user_registry.get_store(user.id)
-    # Filter the global registry to only show this user's analyses
+
+    # Get in-memory records from the monitoring registry
     user_analyses = []
+    seen_ids = set()
     for record_dict in registry.list_all():
         aid = record_dict.get("analysis_id", "")
         if user_registry.verify_ownership(user.id, aid):
             user_analyses.append(record_dict)
+            seen_ids.add(aid)
+
+    # Also fetch persisted records from the database (for analyses from previous sessions)
+    try:
+        from app.database import db
+        db_analyses = db.list_user_analyses(user.id, limit=50)
+        for row in db_analyses:
+            aid = row.get("id", "")
+            if aid not in seen_ids:
+                # Convert DB row to monitoring-compatible format
+                user_analyses.append({
+                    "analysis_id": aid,
+                    "client_name": row.get("client_name", ""),
+                    "filename": row.get("filename", ""),
+                    "status": row.get("status", "unknown"),
+                    "start_time": row.get("created_at"),
+                    "total_duration_seconds": row.get("total_duration_seconds", 0),
+                    "overall_score": row.get("overall_score"),
+                    "overall_rating": row.get("overall_rating"),
+                    "binding_recommendation": row.get("binding_recommendation"),
+                    "red_flag_count": row.get("red_flag_count", 0),
+                    "has_report": row.get("has_report", False),
+                })
+                seen_ids.add(aid)
+    except Exception as e:
+        logger.warning("Failed to fetch persisted analyses: %s", e)
+
     return JSONResponse(content={"analyses": user_analyses})
 
 
@@ -599,38 +692,73 @@ async def get_dashboard(user: AuthUser = Depends(get_current_user)):
 
     Aggregates per-user stats (total/completed/failed analyses, average score)
     and returns the most recent analyses with scores, client names, and report links.
+    Merges in-memory data with persisted database records.
     """
     store = user_registry.get_store(user.id)
 
-    # Collect this user's analysis records from the monitoring registry
+    # Collect this user's analysis records — merge in-memory + database
     user_analyses = []
+    seen_ids = set()
+
+    # In-memory records from monitoring registry
     for record_dict in registry.list_all():
         aid = record_dict.get("analysis_id", "")
         if user_registry.verify_ownership(user.id, aid):
-            user_analyses.append(record_dict)
+            entry = dict(record_dict)
+            # Enrich with score data from in-memory store
+            if aid in store.analyses:
+                analysis_obj = store.analyses[aid]
+                entry["overall_score"] = analysis_obj.overall_score
+                entry["overall_rating"] = analysis_obj.overall_rating
+                entry["binding_recommendation"] = analysis_obj.binding_recommendation
+                entry["red_flag_count"] = analysis_obj.red_flag_count
+            entry["has_report"] = (
+                aid in store.report_paths or aid in store.report_r2_paths
+            )
+            user_analyses.append(entry)
+            seen_ids.add(aid)
+
+    # Persisted records from database (for analyses from previous sessions)
+    try:
+        from app.database import db
+        db_analyses = db.list_user_analyses(user.id, limit=50)
+        for row in db_analyses:
+            aid = row.get("id", "")
+            if aid not in seen_ids:
+                user_analyses.append({
+                    "analysis_id": aid,
+                    "client_name": row.get("client_name", ""),
+                    "filename": row.get("filename", ""),
+                    "status": row.get("status", "unknown"),
+                    "start_time": row.get("created_at"),
+                    "total_duration_seconds": row.get("total_duration_seconds", 0),
+                    "overall_score": row.get("overall_score"),
+                    "overall_rating": row.get("overall_rating"),
+                    "binding_recommendation": row.get("binding_recommendation"),
+                    "red_flag_count": row.get("red_flag_count", 0),
+                    "has_report": row.get("has_report", False),
+                })
+                seen_ids.add(aid)
+    except Exception as e:
+        logger.warning("Failed to fetch persisted analyses for dashboard: %s", e)
 
     total = len(user_analyses)
     completed = [a for a in user_analyses if a.get("status") == "completed"]
     failed = [a for a in user_analyses if a.get("status") == "failed"]
     in_progress = total - len(completed) - len(failed)
 
-    # Calculate average score across completed analyses that have a PolicyAnalysis
-    scores = []
-    for a in completed:
-        aid = a.get("analysis_id", "")
-        if aid in store.analyses:
-            analysis_obj = store.analyses[aid]
-            scores.append(analysis_obj.overall_score)
+    # Calculate average score
+    scores = [a["overall_score"] for a in completed if a.get("overall_score") is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
-    # Calculate average duration for completed analyses
+    # Calculate average duration
     durations = [a["total_duration_seconds"] for a in completed if a.get("total_duration_seconds", 0) > 0]
     avg_duration = round(sum(durations) / len(durations), 1) if durations else None
 
     # Build recent analyses list (up to 20, most recent first)
     recent = []
     for a in user_analyses[:20]:
-        aid = a.get("analysis_id", "")
+        aid = a.get("analysis_id", a.get("id", ""))
         entry = {
             "analysis_id": aid,
             "client_name": a.get("client_name", ""),
@@ -638,29 +766,33 @@ async def get_dashboard(user: AuthUser = Depends(get_current_user)):
             "status": a.get("status", "unknown"),
             "start_time": a.get("start_time"),
             "total_duration_seconds": a.get("total_duration_seconds", 0),
+            "overall_score": a.get("overall_score"),
+            "overall_rating": a.get("overall_rating"),
+            "binding_recommendation": a.get("binding_recommendation"),
+            "red_flag_count": a.get("red_flag_count"),
+            "has_report": a.get("has_report", False),
         }
-        # Enrich with score data if the analysis is completed and stored
-        if aid in store.analyses:
-            analysis_obj = store.analyses[aid]
-            entry["overall_score"] = analysis_obj.overall_score
-            entry["overall_rating"] = analysis_obj.overall_rating
-            entry["binding_recommendation"] = analysis_obj.binding_recommendation
-            entry["red_flag_count"] = analysis_obj.red_flag_count
-        # Check if a report is available
-        entry["has_report"] = (
-            aid in store.report_paths or aid in store.report_r2_paths
-        )
         recent.append(entry)
 
-    # Member since date — look up from DB since token doesn't carry created_at
+    # Member since date — look up from database
     member_since = None
     try:
         from app.auth import get_user_by_id
         db_user = get_user_by_id(user.id)
         if db_user and db_user.created_at:
-            created_ts = float(db_user.created_at)
-            member_since = datetime.fromtimestamp(created_ts).strftime("%B %d, %Y")
-    except (ValueError, TypeError, OSError):
+            created_str = db_user.created_at
+            # Handle both timestamp (float) and ISO string formats
+            try:
+                created_ts = float(created_str)
+                member_since = datetime.fromtimestamp(created_ts).strftime("%B %d, %Y")
+            except (ValueError, TypeError):
+                # ISO format from Supabase
+                try:
+                    dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    member_since = dt.strftime("%B %d, %Y")
+                except (ValueError, TypeError):
+                    member_since = created_str
+    except Exception:
         pass
 
     return JSONResponse(content={

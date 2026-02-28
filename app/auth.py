@@ -1,16 +1,16 @@
 """Local JWT-based authentication module.
 
-Uses SQLite for persistent user storage, bcrypt for password hashing,
-and PyJWT for token generation/validation. Manages per-user data isolation
-for analyses, reports, and monitoring.
+Uses the database abstraction layer (app.database) for persistent user storage,
+bcrypt for password hashing, and PyJWT for token generation/validation.
+Manages per-user data isolation for analyses, reports, and monitoring.
+
+The database backend auto-detects Supabase (via REST API) or falls back to SQLite.
 """
 
 import logging
 import os
 import secrets
-import sqlite3
 import time
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -25,48 +25,26 @@ logger = logging.getLogger(__name__)
 # JWT configuration
 # ---------------------------------------------------------------------------
 # Secret key for signing JWTs — persisted to file so tokens survive restarts
+
 def _load_or_create_jwt_secret() -> str:
+    # Prefer environment variable (for Railway / production)
+    env_secret = os.environ.get("JWT_SECRET", "")
+    if env_secret:
+        return env_secret
+    # Fall back to file-based persistence (for local dev)
     secret_file = Path(__file__).resolve().parent.parent / "data" / ".jwt_secret"
     secret_file.parent.mkdir(parents=True, exist_ok=True)
     if secret_file.exists():
         return secret_file.read_text().strip()
-    secret = os.environ.get("JWT_SECRET", secrets.token_hex(32))
+    secret = secrets.token_hex(32)
     secret_file.write_text(secret)
     return secret
+
 
 JWT_SECRET = _load_or_create_jwt_secret()
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 3600  # 1 hour
 REFRESH_TOKEN_EXPIRE_SECONDS = 86400 * 7  # 7 days
-
-# ---------------------------------------------------------------------------
-# SQLite database
-# ---------------------------------------------------------------------------
-DB_DIR = Path(__file__).resolve().parent.parent / "data"
-DB_PATH = DB_DIR / "users.db"
-
-
-def _get_db() -> sqlite3.Connection:
-    """Get a SQLite connection, creating the database and table if needed."""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            display_name TEXT NOT NULL DEFAULT '',
-            created_at REAL NOT NULL
-        )
-    """)
-    conn.commit()
-    return conn
-
-
-# Initialize database on module load
-_get_db().close()
-logger.info("User database initialized at %s", DB_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -83,51 +61,44 @@ class AuthUser:
 
 
 # ---------------------------------------------------------------------------
-# User CRUD operations
+# User CRUD operations (delegated to database backend)
 # ---------------------------------------------------------------------------
 
 def create_user(email: str, password: str, display_name: str = "") -> AuthUser:
     """Create a new user account. Raises HTTPException on duplicate email."""
+    from app.database import db
+
     email = email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email address.")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
 
-    user_id = str(uuid.uuid4())
-    now = time.time()
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    display_name = display_name or email.split("@")[0]
 
-    conn = _get_db()
     try:
-        conn.execute(
-            "INSERT INTO users (id, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, email, password_hash, display_name or email.split("@")[0], now),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=409, detail="An account with this email already exists.")
-    finally:
-        conn.close()
+        row = db.create_user(email=email, password_hash=password_hash, display_name=display_name)
+    except RuntimeError as e:
+        if "DUPLICATE_EMAIL" in str(e) or "duplicate" in str(e).lower() or "unique" in str(e).lower() or "23505" in str(e):
+            raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        raise HTTPException(status_code=500, detail=f"Failed to create account: {e}")
 
-    logger.info("Created user: %s (%s)", email, user_id)
+    logger.info("Created user: %s (%s)", email, row["id"])
     return AuthUser(
-        id=user_id,
-        email=email,
-        display_name=display_name or email.split("@")[0],
-        created_at=str(now),
+        id=row["id"],
+        email=row["email"],
+        display_name=row["display_name"],
+        created_at=row.get("created_at", ""),
     )
 
 
 def authenticate_user(email: str, password: str) -> AuthUser:
     """Authenticate a user by email and password. Raises HTTPException on failure."""
-    email = email.strip().lower()
+    from app.database import db
 
-    conn = _get_db()
-    try:
-        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    finally:
-        conn.close()
+    email = email.strip().lower()
+    row = db.get_user_by_email(email)
 
     if not row:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -138,27 +109,24 @@ def authenticate_user(email: str, password: str) -> AuthUser:
     return AuthUser(
         id=row["id"],
         email=row["email"],
-        display_name=row["display_name"],
-        created_at=str(row["created_at"]),
+        display_name=row.get("display_name", ""),
+        created_at=str(row.get("created_at", "")),
     )
 
 
 def get_user_by_id(user_id: str) -> Optional[AuthUser]:
     """Look up a user by ID. Returns None if not found."""
-    conn = _get_db()
-    try:
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    finally:
-        conn.close()
+    from app.database import db
 
+    row = db.get_user_by_id(user_id)
     if not row:
         return None
 
     return AuthUser(
         id=row["id"],
         email=row["email"],
-        display_name=row["display_name"],
-        created_at=str(row["created_at"]),
+        display_name=row.get("display_name", ""),
+        created_at=str(row.get("created_at", "")),
     )
 
 
@@ -276,7 +244,7 @@ async def get_current_user(request: Request) -> AuthUser:
 
 
 # ---------------------------------------------------------------------------
-# Per-user data store
+# Per-user data store (in-memory, for active session data)
 # ---------------------------------------------------------------------------
 
 @dataclass

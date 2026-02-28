@@ -21,15 +21,17 @@ RUN pip install --no-cache-dir .
 # Copy application code
 COPY app/ ./app/
 COPY templates/ ./templates/
+COPY static/ ./static/
+COPY migrations/ ./migrations/
 
-# Create temp directory
-RUN mkdir -p /tmp/rhone-analyzer
+# Create temp and data directories
+RUN mkdir -p /tmp/rhone-analyzer /app/data
 
 # Non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app /tmp/rhone-analyzer
 USER appuser
 
-# Cloud Run uses PORT environment variable (defaults to 8000)
+# Railway sets PORT environment variable (defaults to 8000)
 ENV PORT=8000
 EXPOSE ${PORT}
 
