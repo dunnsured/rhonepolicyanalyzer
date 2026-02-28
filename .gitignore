@@ -31,3 +31,8 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime data
+data/
+server.log
+nohup.out

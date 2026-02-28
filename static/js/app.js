@@ -19,7 +19,6 @@
   let progressSSE = null;
   let monitorSSE = null;
 
-  const SUPABASE_URL = ''; // Will be loaded from /api/v1/auth/config
   const STAGE_LABELS = {
     pending:              'Pending',
     extracting:           'Extracting Text',
@@ -88,7 +87,7 @@
     if (currentUser && authToken) {
       authBtns.style.display = 'none';
       userMenu.style.display = 'flex';
-      const name = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || 'User';
+      const name = currentUser.display_name || currentUser.email?.split('@')[0] || 'User';
       $('#nav-user-name').textContent = name;
       $('#nav-user-email').textContent = currentUser.email || '';
       $('#user-avatar').textContent = (name[0] || 'U').toUpperCase();

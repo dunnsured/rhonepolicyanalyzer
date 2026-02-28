@@ -1,6 +1,6 @@
 """FastAPI application for RhôneRisk Cyber Insurance Policy Analyzer.
 
-All analysis endpoints are protected by Supabase authentication.
+All analysis endpoints are protected by local JWT authentication.
 Each user has an isolated environment — they only see their own analyses.
 """
 
@@ -21,7 +21,15 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import StreamingResponse
 
 from app.analysis.engine import AnalysisEngine
-from app.auth import AuthUser, get_current_user, user_registry, SUPABASE_URL, SUPABASE_KEY
+from app.auth import (
+    AuthUser,
+    get_current_user,
+    user_registry,
+    create_user,
+    authenticate_user,
+    generate_tokens,
+    refresh_access_token,
+)
 from app.config import get_settings
 from app.models.requests import ClientInfo
 from app.models.responses import AnalysisSummaryResponse, AnalysisStatusResponse, HealthResponse
@@ -155,11 +163,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("R2 storage not configured — reports will be stored locally only.")
 
-    if SUPABASE_URL and SUPABASE_KEY:
-        logger.info("Supabase auth configured: %s", SUPABASE_URL)
-    else:
-        logger.warning("Supabase auth NOT configured — auth endpoints will fail.")
-
+    logger.info("Local JWT authentication enabled (SQLite + bcrypt).")
     logger.info("RhôneRisk Policy Analyzer started. Model: %s", settings.claude_model)
     yield
     logger.info("RhôneRisk Policy Analyzer shutting down.")
@@ -168,7 +172,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RhôneRisk Cyber Insurance Policy Analyzer",
     description="AI-powered cyber insurance policy analysis with proprietary 21-section framework and 4-tier maturity scoring.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -187,23 +191,23 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 async def health_check():
     return HealthResponse(
         status="ok",
-        version="0.2.0",
+        version="0.3.0",
         knowledge_base_loaded=_validate_knowledge_base(),
     )
 
 
 @app.get("/api/v1/auth/config")
 async def auth_config():
-    """Return Supabase configuration for the frontend client."""
+    """Return auth configuration for the frontend client."""
     return JSONResponse(content={
-        "supabase_url": SUPABASE_URL,
-        "supabase_key": SUPABASE_KEY,
+        "auth_type": "local",
+        "message": "Local JWT authentication is enabled.",
     })
 
 
 @app.post("/api/v1/auth/register")
 async def auth_register(request: Request):
-    """Register a new user via Supabase Auth."""
+    """Register a new user with local auth."""
     body = await request.json()
     email = body.get("email", "").strip()
     password = body.get("password", "")
@@ -211,56 +215,28 @@ async def auth_register(request: Request):
 
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
-    if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
 
-    import requests as http_requests
-    try:
-        resp = http_requests.post(
-            f"{SUPABASE_URL}/auth/v1/signup",
-            json={
-                "email": email,
-                "password": password,
-                "data": {"display_name": display_name or email.split('@')[0]},
-            },
-            headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
-            timeout=15,
-        )
-    except http_requests.RequestException as e:
-        logger.error("Supabase signup request failed: %s", e)
-        raise HTTPException(status_code=502, detail="Authentication service unavailable.")
+    # create_user validates email format and password length, raises HTTPException on error
+    user = create_user(email=email, password=password, display_name=display_name)
 
-    if resp.status_code not in (200, 201):
-        err = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
-        detail = err.get("error_description") or err.get("msg") or err.get("message") or f"Registration failed ({resp.status_code})"
-        raise HTTPException(status_code=resp.status_code if resp.status_code < 500 else 502, detail=detail)
+    # Generate tokens immediately (no email confirmation needed)
+    tokens = generate_tokens(user)
 
-    data = resp.json()
-    # If auto-confirm is enabled, we get an access_token
-    if data.get("access_token"):
-        return JSONResponse(content={
-            "access_token": data["access_token"],
-            "refresh_token": data.get("refresh_token", ""),
-            "user": {
-                "id": data.get("user", {}).get("id", ""),
-                "email": data.get("user", {}).get("email", email),
-                "display_name": display_name or email.split('@')[0],
-            },
-        })
-    else:
-        # Email confirmation required
-        return JSONResponse(content={
-            "message": "Account created. Please check your email to confirm your account.",
-            "user": {
-                "id": data.get("id", data.get("user", {}).get("id", "")),
-                "email": email,
-            },
-        })
+    return JSONResponse(content={
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "expires_in": tokens["expires_in"],
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+        },
+    })
 
 
 @app.post("/api/v1/auth/login")
 async def auth_login(request: Request):
-    """Log in a user via Supabase Auth."""
+    """Log in a user with local auth."""
     body = await request.json()
     email = body.get("email", "").strip()
     password = body.get("password", "")
@@ -268,74 +244,41 @@ async def auth_login(request: Request):
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
 
-    import requests as http_requests
-    try:
-        resp = http_requests.post(
-            f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
-            json={"email": email, "password": password},
-            headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
-            timeout=15,
-        )
-    except http_requests.RequestException as e:
-        logger.error("Supabase login request failed: %s", e)
-        raise HTTPException(status_code=502, detail="Authentication service unavailable.")
+    # authenticate_user validates credentials, raises HTTPException on failure
+    user = authenticate_user(email=email, password=password)
 
-    if resp.status_code == 400:
-        err = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
-        detail = err.get("error_description") or err.get("msg") or "Invalid email or password."
-        raise HTTPException(status_code=401, detail=detail)
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Authentication service error.")
+    # Generate tokens
+    tokens = generate_tokens(user)
 
-    data = resp.json()
-    user_data = data.get("user", {})
     return JSONResponse(content={
-        "access_token": data["access_token"],
-        "refresh_token": data.get("refresh_token", ""),
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "expires_in": tokens["expires_in"],
         "user": {
-            "id": user_data.get("id", ""),
-            "email": user_data.get("email", email),
-            "display_name": user_data.get("user_metadata", {}).get("display_name", email.split('@')[0]),
-            "created_at": user_data.get("created_at", ""),
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "created_at": user.created_at,
         },
     })
 
 
 @app.post("/api/v1/auth/refresh")
 async def auth_refresh(request: Request):
-    """Refresh an access token via Supabase Auth."""
+    """Refresh an access token using a refresh token."""
     body = await request.json()
     refresh_token = body.get("refresh_token", "")
 
     if not refresh_token:
         raise HTTPException(status_code=400, detail="Refresh token is required.")
 
-    import requests as http_requests
-    try:
-        resp = http_requests.post(
-            f"{SUPABASE_URL}/auth/v1/token?grant_type=refresh_token",
-            json={"refresh_token": refresh_token},
-            headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
-            timeout=15,
-        )
-    except http_requests.RequestException as e:
-        logger.error("Supabase refresh request failed: %s", e)
-        raise HTTPException(status_code=502, detail="Authentication service unavailable.")
+    # refresh_access_token validates the refresh token, raises HTTPException on failure
+    tokens = refresh_access_token(refresh_token)
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Refresh token expired. Please log in again.")
-
-    data = resp.json()
-    user_data = data.get("user", {})
     return JSONResponse(content={
-        "access_token": data["access_token"],
-        "refresh_token": data.get("refresh_token", ""),
-        "user": {
-            "id": user_data.get("id", ""),
-            "email": user_data.get("email", ""),
-            "display_name": user_data.get("user_metadata", {}).get("display_name", ""),
-            "created_at": user_data.get("created_at", ""),
-        },
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "expires_in": tokens["expires_in"],
     })
 
 
