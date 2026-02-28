@@ -92,6 +92,7 @@ class ReportSections(BaseModel):
     areas_for_enhancement: list[str] = Field(default_factory=list)
     risk_management_items: list[str] = Field(default_factory=list)
     final_recommendation_detail: str = ""
+    cost_benefit_analysis: str = ""
 
 
 class PolicyAnalysis(BaseModel):

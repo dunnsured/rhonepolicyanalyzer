@@ -20,7 +20,7 @@ from app.models.scoring import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Tool schema: Coverage Scoring (Call 1)
+# Tool schema: Coverage Scoring (Call 1) — unchanged structure
 # ---------------------------------------------------------------------------
 COVERAGE_SCORES_TOOL = {
     "name": "submit_coverage_scores",
@@ -36,57 +36,45 @@ COVERAGE_SCORES_TOOL = {
                     "properties": {
                         "coverage_name": {
                             "type": "string",
-                            "description": "Name of the coverage type, e.g. 'Tech & Professional Services Liability', 'Breach Response Costs'."
+                            "description": "Name of the coverage type."
                         },
                         "coverage_category": {
                             "type": "string",
                             "enum": ["third_party", "first_party", "cyber_crime"],
-                            "description": "Top-level category."
                         },
                         "coverage_subcategory": {
                             "type": "string",
                             "enum": [
-                                "liability",
-                                "incident_response",
-                                "regulatory",
-                                "business_interruption",
-                                "extortion",
-                                "ecrime",
-                                "additional"
+                                "liability", "incident_response", "regulatory",
+                                "business_interruption", "extortion", "ecrime", "additional"
                             ],
-                            "description": "Subcategory within the top-level category. Use 'liability' for third-party coverages. For first-party use: incident_response, regulatory, business_interruption, extortion, additional. For cyber_crime use: ecrime."
                         },
                         "score": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10,
-                            "description": "Maturity score from 0-10."
+                            "type": "integer", "minimum": 0, "maximum": 10,
                         },
                         "rating": {
                             "type": "string",
                             "enum": ["Superior", "Average", "Basic", "No Coverage"],
-                            "description": "Rating tier: Superior (9-10), Average (5-8), Basic (2-4), No Coverage (0-1)."
                         },
                         "limit": {
                             "type": "string",
-                            "description": "Coverage limit as stated in the policy, e.g. '$1,000,000 each Claim', '$250,000 each loss'. Use 'N/A' if not applicable."
+                            "description": "Coverage limit as stated in the policy. Use 'N/A' if not applicable."
                         },
                         "retention": {
                             "type": "string",
-                            "description": "Retention/deductible for this coverage, e.g. '$2,500', '$0', 'N/A'."
+                            "description": "Retention/deductible for this coverage."
                         },
                         "analysis": {
                             "type": "string",
-                            "description": "Detailed analysis paragraph (3-6 sentences) explaining: what the coverage does, why the limit is adequate/inadequate for this specific client, comparison to industry standards, and any notable features or concerns. Write as a senior insurance analyst would for a client-facing report."
+                            "description": "2-4 sentence analysis: what the coverage does, score rationale, limit adequacy vs recommended minimums, and notable features/concerns."
                         },
                         "recommendation": {
                             "type": "string",
-                            "description": "Specific recommendation for this coverage if applicable (e.g. 'Consider increasing to $2-3M if budget allows'). Leave empty string if no specific recommendation needed."
+                            "description": "Specific recommendation if applicable. Empty string if none."
                         },
                         "red_flags": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of red flags identified for this coverage."
                         },
                         "scoring_factors": {
                             "type": "object",
@@ -99,17 +87,14 @@ COVERAGE_SCORES_TOOL = {
                                 "coinsurance": {"type": "integer", "minimum": 0, "maximum": 10},
                                 "coverage_extensions": {"type": "integer", "minimum": 0, "maximum": 10},
                             },
-                            "description": "Individual scoring factor breakdown."
                         },
                         "key_provisions": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Key policy provisions affecting this coverage."
                         },
                         "recommendations": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of specific recommendations for improving this coverage."
                         },
                     },
                     "required": [
@@ -120,30 +105,16 @@ COVERAGE_SCORES_TOOL = {
             },
             "category_summaries": {
                 "type": "array",
-                "description": "Summary for each coverage category/subcategory grouping.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "category_key": {
-                            "type": "string",
-                            "description": "Key matching the subcategory or top-level category, e.g. 'third_party', 'incident_response', 'regulatory', 'business_interruption', 'extortion', 'ecrime', 'additional'."
-                        },
-                        "category_name": {
-                            "type": "string",
-                            "description": "Display name, e.g. 'Third-Party Liability Coverages', 'Incident Response & Breach Costs', 'eCrime Coverages'."
-                        },
-                        "average_score": {
-                            "type": "number",
-                            "description": "Average maturity score for coverages in this category."
-                        },
-                        "assessment": {
-                            "type": "string",
-                            "description": "One-line assessment for the category maturity table, e.g. 'Strong comprehensive liability coverage with opportunity to increase key limits'."
-                        },
+                        "category_key": {"type": "string"},
+                        "category_name": {"type": "string"},
+                        "average_score": {"type": "number"},
+                        "assessment": {"type": "string"},
                         "key_findings": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "3-6 bullet points of key findings: strengths, gaps, and notable features for this category."
                         },
                     },
                     "required": ["category_key", "category_name", "average_score", "assessment", "key_findings"],
@@ -155,79 +126,72 @@ COVERAGE_SCORES_TOOL = {
 }
 
 # ---------------------------------------------------------------------------
-# Tool schema: Report Narrative (Call 2) — Streamlined
+# Tool schema: Report Narrative (Call 2) — RESTRUCTURED for efficiency
 # ---------------------------------------------------------------------------
-# The per-coverage detailed analysis is already captured in Call 1 (analysis
-# paragraphs in each CoverageScore). This call focuses on report-level
-# narrative sections that provide cross-cutting analysis and recommendations.
+# Key changes:
+# - scenario_analysis and benchmarking_analysis REMOVED (computed in Python)
+# - All sections target concise, table-heavy output
+# - Reduced from ~32K to ~16K max_tokens
 REPORT_NARRATIVE_TOOL = {
     "name": "submit_report_narrative",
-    "description": "Submit the narrative content for all report sections, including strategic recommendations.",
+    "description": "Submit the narrative content for all report sections.",
     "input_schema": {
         "type": "object",
         "properties": {
             "executive_summary": {
                 "type": "string",
-                "description": "2-3 paragraph C-suite overview with key metrics, critical gaps, and binding recommendation."
+                "description": "2-3 paragraph C-suite overview: overall maturity score, key metrics (coverages scored, red flags, critical gaps), binding recommendation, and 3-4 sentence strategic context."
             },
             "policy_overview": {
                 "type": "string",
-                "description": "Policy declarations summary including carrier info, policy terms, limits, and retention."
+                "description": "Concise policy declarations: carrier, policy number, effective/expiration dates, aggregate limit, per-occurrence limit, deductible, retroactive date, premium. Use a markdown table."
             },
             "exclusion_analysis": {
                 "type": "string",
-                "description": "Analysis of all exclusions: standard, critical, and their severity with carve-backs."
+                "description": "Markdown table of all exclusions with columns: Exclusion | Severity (Critical/Major/Moderate) | Carve-Back Available | Impact Assessment. Then 1-2 paragraphs of key concerns."
             },
             "gap_analysis": {
                 "type": "string",
-                "description": "Coverage gaps organized by severity: Critical, Major, Moderate, Minor. Include potential exposure amounts."
+                "description": "Coverage gaps as a markdown table with columns: Gap | Severity (Critical/Major/Moderate/Minor) | Estimated Exposure | Recommended Action. Group by severity."
             },
             "red_flag_summary": {
                 "type": "string",
-                "description": "Summary of all identified red flags with affected coverages and recommended mitigations."
-            },
-            "scenario_analysis": {
-                "type": "string",
-                "description": "4 loss scenarios (ransomware, data breach, BEC, dependent BI) with financial modeling."
-            },
-            "benchmarking_analysis": {
-                "type": "string",
-                "description": "Premium and coverage benchmarking against industry standards and peer group."
+                "description": "Markdown table of all red flags with columns: Red Flag | Affected Coverages | Score Impact | Recommended Mitigation."
             },
             "policy_terms_analysis": {
                 "type": "string",
-                "description": "Analysis of claims handling, defense provisions, settlement, panel requirements, ERP, cancellation, M&A provisions."
+                "description": "Concise analysis of: claims handling, defense provisions, settlement authority, panel requirements, ERP, cancellation, M&A provisions. Use a favorable/unfavorable terms table."
             },
             "recommendations": {
                 "type": "string",
-                "description": "Prioritized recommendations: immediate (0-30 days), short-term (30-90 days), long-term (90+ days)."
+                "description": "Prioritized recommendations as a markdown table with columns: # | Recommendation | Priority (High/Medium/Low) | Timeline | Est. Premium Impact. Group by timeline: Immediate (0-30d), Short-term (30-90d), Long-term (90+d)."
             },
             "binding_recommendation": {
                 "type": "string",
-                "description": "Final binding recommendation with detailed rationale."
+                "description": "Clear binding recommendation (Recommend Binding / Bind with Conditions / Require Major Modifications / Recommend Decline) with 2-3 sentence rationale."
             },
             "policy_strengths": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "6-10 bullet points of policy strengths for the Overall Assessment section. Each should be a concise statement with brief explanation."
+                "description": "5-8 concise bullet points of policy strengths."
             },
             "areas_for_enhancement": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "4-8 bullet points of areas for enhancement. Each should identify a specific gap with brief explanation."
+                "description": "4-6 bullet points identifying specific gaps or weaknesses."
             },
             "strategic_recommendations": {
                 "type": "array",
-                "description": "4-8 strategic recommendations with priority levels and budget impact estimates.",
+                "description": "4-6 strategic recommendations with priority levels.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string", "description": "Short title, e.g. 'Increase Data & Network Liability Limit'."},
-                        "priority": {"type": "string", "enum": ["High", "Medium", "Low"], "description": "Priority level."},
-                        "description": {"type": "string", "description": "2-3 sentence description of why this is important."},
-                        "action": {"type": "string", "description": "Specific action to take."},
-                        "budget_impact": {"type": "string", "description": "Estimated budget impact, e.g. 'Estimate $3,000-$8,000 additional premium'."},
-                        "timeframe": {"type": "string", "enum": ["immediate", "medium_term"], "description": "Whether this is an immediate consideration or medium-term enhancement."},
+                        "title": {"type": "string"},
+                        "priority": {"type": "string", "enum": ["High", "Medium", "Low"]},
+                        "description": {"type": "string", "description": "1-2 sentence description."},
+                        "action": {"type": "string"},
+                        "budget_impact": {"type": "string"},
+                        "timeframe": {"type": "string", "enum": ["immediate", "medium_term"]},
                     },
                     "required": ["title", "priority", "description", "action", "budget_impact", "timeframe"],
                 },
@@ -235,11 +199,15 @@ REPORT_NARRATIVE_TOOL = {
             "risk_management_items": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "4-6 numbered risk management and loss control recommendations. Each should be a paragraph with title and detailed guidance."
+                "description": "4-6 risk management recommendations. Each 2-3 sentences."
             },
             "final_recommendation_detail": {
                 "type": "string",
-                "description": "Detailed final recommendation paragraph including: recommended action (e.g. 'Bind with Targeted Enhancements'), numbered list of critical/important/recommended items, budget impact summary, and value proposition statement."
+                "description": "Final recommendation paragraph: recommended action, 3-5 numbered priority items, budget impact summary, value proposition."
+            },
+            "cost_benefit_analysis": {
+                "type": "string",
+                "description": "Markdown table comparing current premium vs recommended enhancements: Enhancement | Additional Premium Est. | Risk Reduction | ROI Assessment. Include total row."
             },
         },
         "required": [
@@ -254,17 +222,13 @@ REPORT_NARRATIVE_TOOL = {
 
 
 class ClaudeClient:
-    """Wrapper around the Anthropic SDK with streaming, retries, and structured outputs.
-
-    Uses streaming API calls to avoid connection timeouts on long-running requests.
-    The sandbox environment has a ~120s connection timeout that kills non-streaming calls.
-    """
+    """Wrapper around the Anthropic SDK with streaming, retries, and structured outputs."""
 
     def __init__(self):
         settings = get_settings()
         self.client = anthropic.Anthropic(
             api_key=settings.anthropic_api_key,
-            max_retries=0,  # We handle retries ourselves for better logging
+            max_retries=0,
         )
         self.model = settings.claude_model
         self.max_tokens = settings.claude_max_tokens
@@ -288,11 +252,7 @@ class ClaudeClient:
         max_tokens: int | None = None,
         max_retries: int = 3,
     ) -> tuple[anthropic.types.Message, dict]:
-        """Make a streaming API call with exponential backoff retry.
-
-        Uses streaming to keep the connection alive and avoid proxy timeouts.
-        Returns a tuple of (response, usage_dict).
-        """
+        """Make a streaming API call with exponential backoff retry."""
         tokens = max_tokens or self.max_tokens
         last_error = None
 
@@ -403,24 +363,16 @@ class ClaudeClient:
         raise RuntimeError(f"Max retries ({max_retries}) exceeded for Claude API call. Last error: {last_error}")
 
     def _extract_tool_input(self, response: anthropic.types.Message) -> dict:
-        """Extract the tool use input from a response.
-
-        If the response was truncated (stop_reason=max_tokens), attempts to
-        recover partial JSON from the incomplete tool_use block.
-        """
+        """Extract the tool use input from a response."""
         for block in response.content:
             if block.type == "tool_use":
                 return block.input
 
-        # If stop_reason is max_tokens, try to recover partial JSON
         if response.stop_reason == "max_tokens":
-            logger.warning(
-                "Response truncated (max_tokens). Attempting partial JSON recovery."
-            )
+            logger.warning("Response truncated (max_tokens). Attempting partial JSON recovery.")
             for block in response.content:
                 if block.type == "text":
                     text = block.text
-                    # Look for the start of a JSON object in tool input
                     brace_start = text.find("{")
                     if brace_start >= 0:
                         partial_json = text[brace_start:]
@@ -429,7 +381,6 @@ class ClaudeClient:
                             logger.info("Recovered partial JSON with %d top-level keys", len(recovered))
                             return recovered
 
-        # Log what we got instead
         content_types = [block.type for block in response.content]
         logger.error("No tool_use block found. Got content types: %s, stop_reason: %s",
                       content_types, response.stop_reason)
@@ -438,21 +389,14 @@ class ClaudeClient:
         raise ValueError(f"No tool_use block found in response. Content types: {content_types}, stop_reason: {response.stop_reason}")
 
     def _try_recover_json(self, partial: str) -> dict | None:
-        """Try to recover a valid JSON object from a truncated string.
-
-        Attempts progressively more aggressive truncation to find a parseable subset.
-        """
-        # First, try as-is (maybe it's complete)
+        """Try to recover a valid JSON object from a truncated string."""
         try:
             return json.loads(partial)
         except json.JSONDecodeError:
             pass
 
-        # Try closing open braces/brackets from the end
-        # Find the last complete key-value pair
         for trim_chars in range(1, min(5000, len(partial))):
             candidate = partial[:-trim_chars]
-            # Try to close it as an object
             for suffix in ['"}', '"]', '}', ']', '"}]', '"}]}', '"}]}}']:
                 try:
                     result = json.loads(candidate + suffix)
@@ -465,7 +409,7 @@ class ClaudeClient:
         return None
 
     def score_coverages(self, policy_text: str, tables_text: str,
-                        metadata_context: str) -> tuple[list[CoverageScore], list[CategorySummary], dict]:
+                        metadata_context: str, client_context: str = "") -> tuple[list[CoverageScore], list[CategorySummary], dict]:
         """Call 1: Score all coverage types with detailed per-coverage analysis.
 
         Returns:
@@ -475,8 +419,15 @@ class ClaudeClient:
 
         system = [{"type": "text", "text": self.system_prompt}]
 
-        user_message = f"""Analyze the following cyber insurance policy and score ALL coverage types using the RhôneRisk 4-Tier Maturity Scoring System.
+        client_section = ""
+        if client_context:
+            client_section = f"""
+## Client Information
+{client_context}
+"""
 
+        user_message = f"""Analyze the following cyber insurance policy and score ALL coverage types using the RhôneRisk Maturity Scoring System.
+{client_section}
 ## Pre-Parsed Policy Metadata
 {metadata_context}
 
@@ -489,19 +440,14 @@ class ClaudeClient:
 1. Score EVERY coverage type listed in the methodology (all 21 types across third-party, first-party, and cyber crime categories).
 2. For coverages not explicitly found in the policy, score them as 0 (No Coverage).
 3. For EACH coverage, provide:
-   - The **limit** as stated in the policy (e.g. "$1,000,000 each Claim")
-   - The **retention/deductible** (e.g. "$2,500")
-   - A **detailed analysis paragraph** (3-6 sentences) explaining: what the coverage does, why the score was given, how the limit compares to industry standards, relevance to the client's specific industry, and any notable features or concerns
-   - A specific **recommendation** if applicable (e.g. "Consider increasing to $2-3M if budget allows")
-   - The correct **subcategory** for grouping (liability, incident_response, regulatory, business_interruption, extortion, ecrime, additional)
-4. Identify ALL red flags per the red flag rules.
-5. Evaluate each applicable scoring factor (limit adequacy, trigger mechanism, exclusions, etc.).
-6. For each coverage category/subcategory group, provide a **category summary** with:
-   - Average maturity score
-   - A one-line assessment
-   - 3-6 key findings (strengths, gaps, notable features)
-
-The analysis paragraphs should read as a senior insurance analyst would write for a client-facing due diligence report. Be specific about dollar amounts, policy terms, and industry comparisons.
+   - The **limit** as stated in the policy
+   - The **retention/deductible**
+   - A **concise analysis** (2-4 sentences): score rationale, limit vs recommended minimums from the framework, and notable features/concerns
+   - A specific **recommendation** if applicable
+   - Apply the **weighted maturity scoring**: Coverage Comprehensiveness (40%), Limit Adequacy (30%), Terms & Conditions (20%), Carrier Quality (10%)
+4. Compare limits against the **Recommended Minimum Limits** table in the framework.
+5. Identify ALL red flags per the red flag rules.
+6. For each category group, provide a **category summary** with average score, one-line assessment, and 3-5 key findings.
 
 Use the submit_coverage_scores tool to return your complete analysis."""
 
@@ -531,10 +477,12 @@ Use the submit_coverage_scores tool to return your complete analysis."""
         metadata_context: str,
         scores_context: str,
         client_context: str,
+        risk_quantification_md: str = "",
     ) -> tuple[ReportSections, list[StrategicRecommendation], dict]:
         """Call 2: Generate narrative content for all report sections via streaming.
 
-        Uses 32K max_tokens to ensure the full narrative fits without truncation.
+        Uses 16K max_tokens (down from 32K) — risk quantification and benchmarking
+        are pre-computed in Python and injected as context.
 
         Returns:
             Tuple of (ReportSections, list of StrategicRecommendation, usage dict).
@@ -543,7 +491,14 @@ Use the submit_coverage_scores tool to return your complete analysis."""
 
         system = [{"type": "text", "text": self.system_prompt}]
 
-        user_message = f"""Generate the complete narrative content for a RhôneRisk cyber insurance policy analysis report.
+        rq_section = ""
+        if risk_quantification_md:
+            rq_section = f"""
+## Pre-Computed Risk Quantification (DO NOT regenerate — reference these numbers)
+{risk_quantification_md}
+"""
+
+        user_message = f"""Generate the narrative content for a RhôneRisk cyber insurance policy analysis report.
 
 ## Client Information
 {client_context}
@@ -553,35 +508,47 @@ Use the submit_coverage_scores tool to return your complete analysis."""
 
 ## Coverage Scores (from analysis)
 {scores_context}
-
+{rq_section}
 ## Full Policy Text
 {policy_text}
 
 {tables_text}
 
-## Instructions
-Generate professional, detailed narrative content for each report section. The tone should be authoritative and analytical — written as a senior insurance analyst would for a client-facing deliverable.
+## CRITICAL: Output Format Rules
+- Use **markdown tables** for structured data (exclusions, gaps, red flags, recommendations, cost-benefit)
+- Keep prose sections to **2-3 paragraphs max**
+- Be **specific**: cite policy language, dollar amounts, and page references
+- Be **concise**: no filler, no repetition
+- Reference the **pre-computed risk quantification numbers** for scenario analysis — do NOT recalculate them
+- Compare limits against the **Recommended Minimum Limits** and **Industry Benchmarks** from the framework
 
-**Required sections:**
-1. **Executive Summary**: 2-3 paragraphs for C-suite audience with overall assessment and binding recommendation
-2. **Policy Overview**: Declaration page details, carrier information, policy terms
-3. **Exclusion Analysis**: Every exclusion identified with severity rating and carve-back assessment
-4. **Gap Analysis**: All gaps organized by severity (Critical/Major/Moderate/Minor) with exposure estimates
-5. **Red Flag Summary**: Summary of all identified red flags with affected coverages and mitigations
-6. **Scenario Analysis**: 4 realistic loss scenarios with financial modeling against policy coverage
-7. **Benchmarking Analysis**: Compare against industry standards for limits, premiums, and coverage breadth
-8. **Policy Terms Analysis**: Claims handling, defense provisions, settlement, panel requirements, ERP
-9. **Recommendations**: Prioritized by timeline (immediate/short-term/long-term) with cost-benefit reasoning
-10. **Binding Recommendation**: Clear recommendation with detailed supporting rationale
+## Required Sections
 
-**Required structured data:**
-11. **Policy Strengths**: 6-10 concise bullet points highlighting the policy's strongest features
-12. **Areas for Enhancement**: 4-8 bullet points identifying specific gaps or weaknesses
-13. **Strategic Recommendations**: 4-8 detailed recommendations with priority (High/Medium/Low), specific actions, budget impact estimates, and timeframe (immediate vs medium-term)
-14. **Risk Management Items**: 4-6 detailed risk management and loss control recommendations
-15. **Final Recommendation Detail**: A comprehensive final recommendation paragraph with numbered action items, budget impact summary, and value proposition
+1. **Executive Summary**: 2-3 paragraphs. Include: overall maturity score, binding recommendation, key metrics (coverages scored, red flags, critical gaps), and strategic context.
 
-Use the submit_report_narrative tool to return all section content."""
+2. **Policy Overview**: Markdown table of declarations (carrier, policy number, dates, limits, deductible, premium, retroactive date).
+
+3. **Exclusion Analysis**: Markdown table — Exclusion | Severity | Carve-Back | Impact. Then 1-2 paragraphs on key concerns.
+
+4. **Gap Analysis**: Markdown table — Gap | Severity | Estimated Exposure | Recommended Action. Group by severity.
+
+5. **Red Flag Summary**: Markdown table — Red Flag | Affected Coverages | Score Impact | Mitigation.
+
+6. **Policy Terms Analysis**: Favorable vs unfavorable terms table. Brief analysis of claims handling, defense, ERP, panel requirements.
+
+7. **Recommendations**: Markdown table — # | Recommendation | Priority | Timeline | Est. Premium Impact. Group by timeline.
+
+8. **Binding Recommendation**: Clear recommendation with 2-3 sentence rationale.
+
+9. **Cost-Benefit Analysis**: Markdown table — Enhancement | Additional Premium Est. | Risk Reduction | ROI Assessment. Include total row.
+
+10. **Policy Strengths**: 5-8 bullet points.
+11. **Areas for Enhancement**: 4-6 bullet points.
+12. **Strategic Recommendations**: 4-6 structured recommendations (title, priority, description, action, budget_impact, timeframe).
+13. **Risk Management Items**: 4-6 items, each 2-3 sentences.
+14. **Final Recommendation Detail**: Paragraph with numbered priority items and budget summary.
+
+Use the submit_report_narrative tool to return all content."""
 
         messages = [{"role": "user", "content": user_message}]
 
@@ -592,7 +559,7 @@ Use the submit_report_narrative tool to return all section content."""
             messages=messages,
             tools=[REPORT_NARRATIVE_TOOL],
             tool_choice={"type": "tool", "name": "submit_report_narrative"},
-            max_tokens=32768,
+            max_tokens=16384,
         )
 
         result = self._extract_tool_input(response)
@@ -601,20 +568,17 @@ Use the submit_report_narrative tool to return all section content."""
         strategic_recs_raw = result.pop("strategic_recommendations", [])
         strategic_recs = [StrategicRecommendation(**sr) for sr in strategic_recs_raw]
 
-        # Normalize list fields: Claude sometimes returns markdown strings instead of arrays
+        # Normalize list fields
         list_fields = ["policy_strengths", "areas_for_enhancement", "risk_management_items"]
         for field in list_fields:
             val = result.get(field)
             if isinstance(val, str) and val.strip():
-                # Split markdown bullet points into a list
                 lines = []
                 for line in val.split("\n"):
                     line = line.strip()
-                    # Remove leading bullet markers: -, *, numbered (1., 2.), or bold markers
                     if line.startswith(("- ", "* ", "• ")):
                         line = line[2:].strip()
                     elif len(line) > 2 and line[0].isdigit() and "." in line[:4]:
-                        # Handle "1. ", "2. ", etc.
                         dot_pos = line.index(".")
                         line = line[dot_pos + 1:].strip()
                     if line:
@@ -624,7 +588,7 @@ Use the submit_report_narrative tool to return all section content."""
             elif val is None:
                 result[field] = []
 
-        # Remove any extra keys not in ReportSections to avoid Pydantic errors
+        # Remove any extra keys not in ReportSections
         valid_fields = set(ReportSections.model_fields.keys())
         filtered_result = {k: v for k, v in result.items() if k in valid_fields}
 
