@@ -79,6 +79,15 @@ _SUPABASE_ANALYSES_COLUMNS = {
     "id", "user_id", "client_name", "file_name", "status",
     "overall_score", "rating", "binding_recommendation",
     "red_flag_count", "critical_gap_count", "created_at", "completed_at",
+    # Billing/teaser columns
+    "is_unlocked", "unlock_method", "teaser_viewed_at", "stripe_payment_id",
+    "nudge_email_1_sent", "nudge_email_2_sent", "nudge_email_3_sent",
+    "nudge_sms_1_sent", "nudge_sms_2_sent",
+    # Additional metadata
+    "has_report", "report_r2_key", "total_duration_seconds",
+    "scoring_input_tokens", "scoring_output_tokens",
+    "narrative_input_tokens", "narrative_output_tokens",
+    "page_count", "error",
 }
 
 # Map from internal field names to Supabase column names

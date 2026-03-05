@@ -6,6 +6,7 @@
   <title>RhôneRisk — Cyber Insurance Policy Analyzer</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23d4a843'/><text x='50%25' y='55%25' dominant-baseline='central' text-anchor='middle' font-family='Georgia,serif' font-weight='800' font-size='18' fill='%231a1a2e'>R</text></svg>">
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
 
@@ -20,16 +21,18 @@
       <a href="/" data-view="home">Home</a>
       <a href="#dashboard" data-view="dashboard" class="auth-only" style="display:none">Dashboard</a>
       <a href="#analyze" data-view="analyze" class="auth-only" style="display:none">Analyze</a>
+      <a href="#pricing" data-view="pricing">Pricing</a>
       <a href="#monitor" data-view="monitor" class="auth-only" style="display:none">Monitor</a>
     </div>
     <div class="nav-right">
       <!-- Shown when logged out -->
       <div id="nav-auth-buttons" class="nav-auth-buttons">
         <a href="#login" data-view="login" class="btn btn-sm btn-outline">Log In</a>
-        <a href="#register" data-view="register" class="btn btn-sm btn-primary">Sign Up</a>
+        <a href="#register" data-view="register" class="btn btn-sm btn-primary">Start Free</a>
       </div>
       <!-- Shown when logged in -->
       <div id="nav-user-menu" class="nav-user-menu" style="display:none">
+        <div class="nav-credits-badge" id="nav-credits-badge" title="Available credits">0 credits</div>
         <div class="user-avatar" id="user-avatar">U</div>
         <div class="user-info">
           <span class="user-name" id="nav-user-name">User</span>
@@ -64,43 +67,62 @@
           <button type="submit" class="btn btn-primary btn-lg btn-full" id="login-btn">Sign In</button>
         </form>
         <div class="auth-footer">
-          Don't have an account? <a href="#register" data-view="register">Create one</a>
+          Don't have an account? <a href="#register" data-view="register">Get started free</a>
         </div>
       </div>
     </div>
   </section>
 </div>
 
-<!-- ======== REGISTER VIEW ======== -->
+<!-- ======== REGISTER VIEW (redesigned with value props) ======== -->
 <div id="view-register" class="view">
   <section class="page-section">
-    <div class="auth-container">
+    <div class="register-layout">
+      <!-- Left: Value Props -->
+      <div class="register-value-panel">
+        <h2>Start Analyzing Policies in Minutes</h2>
+        <ul class="value-list">
+          <li><span class="value-check">&#10003;</span> First analysis completely free</li>
+          <li><span class="value-check">&#10003;</span> No credit card required</li>
+          <li><span class="value-check">&#10003;</span> AI-powered 21-section framework</li>
+          <li><span class="value-check">&#10003;</span> Risk quantification with dollar amounts</li>
+          <li><span class="value-check">&#10003;</span> Professional PDF reports</li>
+          <li><span class="value-check">&#10003;</span> Results in ~5 minutes</li>
+        </ul>
+      </div>
+      <!-- Right: Form -->
       <div class="auth-card card fade-in">
         <div class="auth-header">
           <div class="auth-logo-mark">R</div>
-          <h2>Create Account</h2>
-          <p>Get started with RhôneRisk policy analysis</p>
+          <h2>Create Your Account</h2>
+          <p>Get your first analysis free — no credit card needed</p>
         </div>
         <form id="register-form" class="auth-form">
-          <div class="form-group">
-            <label class="form-label" for="register-name">Display Name</label>
-            <input class="form-input" type="text" id="register-name" placeholder="Your name" required>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="register-name">Full Name</label>
+              <input class="form-input" type="text" id="register-name" placeholder="Ryan Smith" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="register-phone">Phone <span class="form-hint">(optional)</span></label>
+              <input class="form-input" type="tel" id="register-phone" placeholder="+1 (555) 123-4567">
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label" for="register-email">Email Address</label>
+            <label class="form-label" for="register-email">Work Email</label>
             <input class="form-input" type="email" id="register-email" placeholder="you@company.com" required autocomplete="email">
           </div>
           <div class="form-group">
             <label class="form-label" for="register-password">Password</label>
-            <input class="form-input" type="password" id="register-password" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password">
+            <input class="form-input" type="password" id="register-password" placeholder="Min. 8 characters" required minlength="8" autocomplete="new-password">
           </div>
-          <div class="form-group">
-            <label class="form-label" for="register-confirm">Confirm Password</label>
-            <input class="form-input" type="password" id="register-confirm" placeholder="Re-enter password" required minlength="6" autocomplete="new-password">
+          <div class="checkbox-group">
+            <input type="checkbox" id="register-sms-optin">
+            <label for="register-sms-optin">Send me SMS updates about my analyses</label>
           </div>
           <div id="register-error" class="auth-error" style="display:none"></div>
           <div id="register-success" class="auth-success" style="display:none"></div>
-          <button type="submit" class="btn btn-primary btn-lg btn-full" id="register-btn">Create Account</button>
+          <button type="submit" class="btn btn-primary btn-lg btn-full" id="register-btn">Create Account &amp; Start Free</button>
         </form>
         <div class="auth-footer">
           Already have an account? <a href="#login" data-view="login">Sign in</a>
@@ -119,8 +141,14 @@
       <h1>AI-Powered <em>Cyber Insurance</em> Policy Analysis</h1>
       <p>Upload any cyber insurance policy PDF and receive a comprehensive, scored analysis with actionable binding recommendations — powered by advanced AI.</p>
       <div class="hero-actions">
-        <a class="btn btn-primary btn-lg" id="hero-cta" data-view="analyze">Analyze a Policy</a>
-        <a class="btn btn-secondary btn-lg" href="#features">Learn More</a>
+        <a class="btn btn-primary btn-lg guest-cta" id="hero-cta-guest" href="#register" data-view="register">Start Your Free Analysis</a>
+        <a class="btn btn-primary btn-lg auth-cta" id="hero-cta-auth" data-view="analyze" style="display:none">Analyze a Policy</a>
+        <a class="btn btn-secondary btn-lg" href="#pricing" data-view="pricing">View Pricing</a>
+      </div>
+      <div class="hero-trust">
+        <span class="trust-item">&#10003; First analysis free</span>
+        <span class="trust-item">&#10003; Results in ~5 minutes</span>
+        <span class="trust-item">&#10003; No credit card required</span>
       </div>
     </div>
   </section>
@@ -132,34 +160,58 @@
     </div>
     <div class="features-grid container">
       <div class="feature-card">
-        <div class="feature-icon">📄</div>
-        <h3>Smart PDF Extraction</h3>
-        <p>Advanced text extraction handles complex policy documents, tables, endorsements, and multi-column layouts with high fidelity.</p>
+        <div class="feature-icon">&#127919;</div>
+        <h3>Coverage Scoring</h3>
+        <p>21-section analysis with weighted maturity scoring across Coverage (40%), Limits (30%), Terms (20%), and Carrier Quality (10%).</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">🧠</div>
-        <h3>AI-Powered Scoring</h3>
-        <p>Claude AI evaluates 21 coverage sections using a 4-tier maturity model: Superior, Average, Basic, and No Coverage.</p>
+        <div class="feature-icon">&#128200;</div>
+        <h3>Risk Quantification</h3>
+        <p>Dollar-amount scenario modeling for Ransomware, Data Breach, and BEC attacks with probability-weighted Expected Annual Loss.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📊</div>
-        <h3>Branded PDF Reports</h3>
-        <p>Receive a professionally formatted PDF report with scores, red flags, critical gaps, and a clear binding recommendation.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔒</div>
+        <div class="feature-icon">&#9888;&#65039;</div>
         <h3>Red Flag Detection</h3>
-        <p>Automatically identifies problematic exclusions, sub-limits, restrictive definitions, and coverage gaps that could leave clients exposed.</p>
+        <p>Automatic identification of critical coverage gaps, unfavorable terms, and hidden exclusions that could leave clients exposed.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">⚡</div>
-        <h3>Fast Turnaround</h3>
-        <p>Full analysis in 1–3 minutes. No more spending hours manually reviewing dense policy language.</p>
+        <div class="feature-icon">&#128203;</div>
+        <h3>Binding Recommendation</h3>
+        <p>Clear Bind / Bind with Conditions / Do Not Bind recommendation with detailed rationale and negotiation points.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">🎯</div>
-        <h3>Binding Recommendations</h3>
-        <p>Clear, actionable recommendations — Bind, Bind with Caution, or Decline — backed by detailed rationale.</p>
+        <div class="feature-icon">&#128202;</div>
+        <h3>Industry Benchmarking</h3>
+        <p>Compare coverage limits and terms against industry-specific benchmarks based on revenue size and data exposure.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128196;</div>
+        <h3>PDF Report</h3>
+        <p>Professional, client-ready PDF report with executive summary, detailed analysis, and strategic recommendations.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how-it-works">
+    <div class="container">
+      <h2 class="section-title-center">How It Works</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3>Upload Policy PDF</h3>
+          <p>Drag and drop or select any cyber insurance policy document.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3>AI Analysis</h3>
+          <p>Our engine scores 21 coverage sections, quantifies risk, and identifies red flags.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>Get Your Report</h3>
+          <p>Receive a comprehensive analysis with binding recommendations and a PDF report.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -178,7 +230,9 @@
           <p class="dash-subtitle" id="dash-subtitle">Here's an overview of your policy analysis activity.</p>
         </div>
         <div class="dash-hero-action">
+          <span class="dash-credits-badge" id="dash-credits-badge">0 credits</span>
           <a class="btn btn-primary btn-lg" data-view="analyze" id="dash-new-analysis">+ New Analysis</a>
+          <a class="btn btn-outline btn-lg" data-view="pricing">Buy Credits</a>
         </div>
       </div>
     </div>
@@ -234,11 +288,11 @@
             <tbody id="dash-analyses-tbody"></tbody>
           </table>
         </div>
-        <div id="dash-empty" class="dash-empty-state" style="display:none">
+        <div id="dash-empty" class="dash-empty" style="display:none">
           <div class="dash-empty-icon">&#128196;</div>
           <h3>No analyses yet</h3>
           <p>Upload your first cyber insurance policy PDF to get started with AI-powered analysis.</p>
-          <a class="btn btn-primary btn-lg" data-view="analyze">Analyze a Policy</a>
+          <a class="btn btn-primary btn-lg" data-view="analyze">Analyze a Policy — It's Free!</a>
         </div>
       </div>
 
@@ -246,68 +300,127 @@
   </section>
 </div>
 
-<!-- ======== ANALYZE VIEW ======== -->
+<!-- ======== ANALYZE VIEW (redesigned with "What You'll Get" panel) ======== -->
 <div id="view-analyze" class="view">
   <section class="page-section">
     <div class="container">
       <h1 class="section-title">Analyze a Policy</h1>
       <p class="section-subtitle">Upload a cyber insurance policy PDF for AI-powered analysis and scoring.</p>
 
-      <form id="analyze-form" class="card fade-in">
+      <div class="analyze-layout">
+        <!-- Left: Upload Form -->
+        <form id="analyze-form" class="card fade-in analyze-form-card">
 
-        <!-- Dropzone -->
-        <div class="form-group">
-          <label class="form-label">Policy Document <span style="color:var(--red)">*</span></label>
-          <div class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".pdf">
-            <div class="dropzone-icon">📄</div>
-            <h3>Drag &amp; drop your PDF here</h3>
-            <p>or click to browse — PDF only, max 50 MB</p>
-          </div>
-          <div class="file-info" id="file-info" style="display:none"></div>
-        </div>
-
-        <hr style="border:none;border-top:1px solid var(--gray-200);margin:28px 0">
-
-        <h3 style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:16px">Client Information <span class="form-hint">(optional)</span></h3>
-
-        <div class="form-row">
+          <!-- Dropzone -->
           <div class="form-group">
-            <label class="form-label" for="client_name">Client Name</label>
-            <input class="form-input" type="text" id="client_name" placeholder="e.g. Acme Corp">
+            <label class="form-label">Policy Document <span style="color:var(--red)">*</span></label>
+            <div class="dropzone" id="dropzone">
+              <input type="file" id="file-input" accept=".pdf">
+              <div class="dropzone-icon">&#128196;</div>
+              <h3>Drag &amp; drop your PDF here</h3>
+              <p>or click to browse — PDF only, max 50 MB</p>
+            </div>
+            <div class="file-info" id="file-info" style="display:none"></div>
           </div>
+
+          <hr style="border:none;border-top:1px solid var(--gray-200);margin:28px 0">
+
+          <h3 style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:16px">Client Information <span class="form-hint">(optional — improves accuracy)</span></h3>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="client_name">Client Name</label>
+              <input class="form-input" type="text" id="client_name" placeholder="e.g. Acme Corp">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="industry">Industry</label>
+              <select class="form-input" id="industry">
+                <option value="">Select industry...</option>
+                <option value="Technology">Technology</option>
+                <option value="Healthcare">Healthcare</option>
+                <option value="Financial Services">Financial Services</option>
+                <option value="Manufacturing">Manufacturing</option>
+                <option value="Retail">Retail / E-Commerce</option>
+                <option value="Professional Services">Professional Services</option>
+                <option value="Education">Education</option>
+                <option value="Government">Government</option>
+                <option value="Energy">Energy / Utilities</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="annual_revenue">Annual Revenue</label>
+              <input class="form-input" type="text" id="annual_revenue" placeholder="e.g. $10M">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="employee_count">Employee Count</label>
+              <input class="form-input" type="text" id="employee_count" placeholder="e.g. 250">
+            </div>
+          </div>
+
+          <div class="checkbox-group">
+            <input type="checkbox" id="is_msp">
+            <label for="is_msp">This client is a Managed Service Provider (MSP)</label>
+          </div>
+
           <div class="form-group">
-            <label class="form-label" for="industry">Industry</label>
-            <input class="form-input" type="text" id="industry" placeholder="e.g. Technology, Healthcare">
+            <label class="form-label" for="notes">Additional Notes</label>
+            <textarea class="form-textarea" id="notes" placeholder="Any special considerations or context for the analysis..."></textarea>
+          </div>
+
+          <div class="analyze-submit-row">
+            <div class="credit-info-inline" id="credit-info-inline">
+              <span class="credit-dot"></span>
+              <span id="credit-info-text">Loading credits...</span>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">&#11014; Upload &amp; Analyze</button>
+          </div>
+
+        </form>
+
+        <!-- Right: What You'll Get Panel -->
+        <div class="wyg-panel card fade-in">
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:20px">What You'll Receive</h3>
+          <div class="wyg-item">
+            <span class="wyg-icon">&#127919;</span>
+            <div>
+              <strong>Overall Score &amp; Rating</strong>
+              <p>4-tier maturity rating with weighted scoring</p>
+            </div>
+          </div>
+          <div class="wyg-item">
+            <span class="wyg-icon">&#128200;</span>
+            <div>
+              <strong>Risk Quantification</strong>
+              <p>Dollar-amount scenarios for ransomware, breach, BEC</p>
+            </div>
+          </div>
+          <div class="wyg-item">
+            <span class="wyg-icon">&#9888;&#65039;</span>
+            <div>
+              <strong>Red Flags &amp; Gaps</strong>
+              <p>Critical coverage issues and hidden exclusions</p>
+            </div>
+          </div>
+          <div class="wyg-item">
+            <span class="wyg-icon">&#128203;</span>
+            <div>
+              <strong>Binding Recommendation</strong>
+              <p>Clear Bind / Conditional / Do Not Bind decision</p>
+            </div>
+          </div>
+          <div class="wyg-item">
+            <span class="wyg-icon">&#128196;</span>
+            <div>
+              <strong>PDF Report</strong>
+              <p>Professional client-ready report document</p>
+            </div>
           </div>
         </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="annual_revenue">Annual Revenue</label>
-            <input class="form-input" type="text" id="annual_revenue" placeholder="e.g. $10M">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="employee_count">Employee Count</label>
-            <input class="form-input" type="text" id="employee_count" placeholder="e.g. 250">
-          </div>
-        </div>
-
-        <div class="checkbox-group">
-          <input type="checkbox" id="is_msp">
-          <label for="is_msp">This client is a Managed Service Provider (MSP)</label>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="notes">Additional Notes</label>
-          <textarea class="form-textarea" id="notes" placeholder="Any special considerations or context for the analysis…"></textarea>
-        </div>
-
-        <div style="text-align:right;padding-top:8px">
-          <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">⬆ Upload &amp; Analyze</button>
-        </div>
-
-      </form>
+      </div>
     </div>
   </section>
 </div>
@@ -333,7 +446,7 @@
 
           <div class="progress-stage" id="progress-stage">Pending</div>
           <div class="progress-elapsed" id="progress-elapsed"></div>
-          <div class="progress-detail" id="progress-detail">Preparing analysis…</div>
+          <div class="progress-detail" id="progress-detail">Preparing analysis...</div>
 
           <div style="margin-top:16px;font-size:13px;color:var(--gray-400)">
             Analysis ID: <code id="analysis-id-display" style="color:var(--gray-600)">—</code>
@@ -363,7 +476,98 @@
   </section>
 </div>
 
-<!-- ======== RESULTS VIEW ======== -->
+<!-- ======== TEASER VIEW (paywall — shows limited results) ======== -->
+<div id="view-teaser" class="view">
+  <section class="page-section">
+    <div class="container" style="max-width:900px">
+
+      <div class="teaser-header">
+        <h1>Policy Analysis Complete</h1>
+        <p id="teaser-client-name">Your analysis results are ready</p>
+      </div>
+
+      <!-- Score Card (visible) -->
+      <div class="card fade-in teaser-score-card">
+        <div class="results-header">
+          <div class="score-gauge">
+            <svg viewBox="0 0 200 200">
+              <circle class="gauge-bg" cx="100" cy="100" r="88"
+                      transform="rotate(-90 100 100)"
+                      stroke-dasharray="553" stroke-dashoffset="0"/>
+              <circle class="gauge-fill" id="teaser-gauge-fill" cx="100" cy="100" r="88"
+                      transform="rotate(-90 100 100)"
+                      stroke-dasharray="553" stroke-dashoffset="553"/>
+            </svg>
+            <div class="score-value">
+              <span class="score-num" id="teaser-score-num">0.0</span>
+              <span class="score-max">/ 10</span>
+            </div>
+          </div>
+          <div id="teaser-rating-badge" class="rating-badge rating-average">—</div>
+        </div>
+        <div class="teaser-summary-stats">
+          <div class="teaser-stat">
+            <span class="teaser-stat-value teaser-stat-red" id="teaser-red-flags">0</span>
+            <span class="teaser-stat-label">Red Flags</span>
+          </div>
+          <div class="teaser-stat">
+            <span class="teaser-stat-value teaser-stat-amber" id="teaser-gaps">0</span>
+            <span class="teaser-stat-label">Critical Gaps</span>
+          </div>
+          <div class="teaser-stat">
+            <span class="teaser-stat-value" id="teaser-recommendation">—</span>
+            <span class="teaser-stat-label">Recommendation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blurred Preview -->
+      <div class="teaser-blur-wrapper">
+        <div class="teaser-blur-content">
+          <div class="card" style="padding:24px">
+            <h3 style="color:var(--navy);margin-bottom:12px">Coverage Score Breakdown</h3>
+            <table style="width:100%;font-size:14px;color:var(--gray-500)">
+              <tr><td>Incident Response</td><td>&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</td><td>8.2</td></tr>
+              <tr><td>Business Interruption</td><td>&#9608;&#9608;&#9608;&#9608;&#9608;</td><td>7.5</td></tr>
+              <tr><td>Data Breach Liability</td><td>&#9608;&#9608;&#9608;&#9608;</td><td>6.1</td></tr>
+              <tr><td>Ransomware Coverage</td><td>&#9608;&#9608;&#9608;</td><td>4.8</td></tr>
+              <tr><td>Regulatory Defense</td><td>&#9608;&#9608;&#9608;&#9608;&#9608;</td><td>7.0</td></tr>
+            </table>
+          </div>
+          <div class="card" style="padding:24px;margin-top:16px">
+            <h3 style="color:var(--navy);margin-bottom:12px">Risk Quantification</h3>
+            <p style="color:var(--gray-500)">Ransomware scenario: $4.2M total impact...</p>
+            <p style="color:var(--gray-500)">Data Breach scenario: $8.7M total impact...</p>
+          </div>
+        </div>
+        <div class="teaser-blur-overlay">
+          <div class="blur-lock-icon">&#128274;</div>
+          <h3>Full Analysis Locked</h3>
+          <p>Unlock to see detailed coverage scores, risk quantification, red flag analysis, and download the PDF report.</p>
+        </div>
+      </div>
+
+      <!-- Unlock CTA -->
+      <div class="teaser-cta-card card fade-in">
+        <h2 style="color:var(--navy);margin-bottom:8px">Unlock Your Full Report</h2>
+        <p style="color:var(--gray-500);margin-bottom:24px">Get the complete analysis with all details, recommendations, and PDF report.</p>
+        <div class="teaser-cta-buttons">
+          <button class="btn btn-primary btn-lg" id="btn-unlock-credit">
+            Use 1 Credit <span id="teaser-credit-remaining" style="font-size:13px;opacity:.8"></span>
+          </button>
+          <button class="btn btn-secondary btn-lg" id="btn-unlock-purchase">
+            Buy This Report — $49
+          </button>
+        </div>
+        <div class="teaser-cta-or">or</div>
+        <a href="#pricing" data-view="pricing" class="btn btn-outline btn-lg">Subscribe &amp; Save — from $99/mo</a>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ======== RESULTS VIEW (full unlocked analysis) ======== -->
 <div id="view-results" class="view">
   <section class="page-section">
     <div class="container">
@@ -389,8 +593,8 @@
         </div>
 
         <div id="recommendation" class="recommendation-card rec-caution">
-          <span class="rec-icon">⚠️</span>
-          <div>Loading…</div>
+          <span class="rec-icon">&#9888;&#65039;</span>
+          <div>Loading...</div>
         </div>
 
         <!-- Policy Metadata -->
@@ -429,10 +633,108 @@
 
       <!-- Actions -->
       <div style="display:flex;gap:16px;justify-content:center;padding:20px 0;flex-wrap:wrap">
-        <button class="btn btn-primary btn-lg" id="download-btn">📥 Download PDF Report</button>
+        <button class="btn btn-primary btn-lg" id="download-btn">&#128229; Download PDF Report</button>
         <button class="btn btn-outline btn-lg" id="new-analysis-btn">+ New Analysis</button>
       </div>
 
+      <!-- Post-report CTA -->
+      <div class="post-report-cta card fade-in-delay">
+        <h3 style="color:var(--navy);margin-bottom:8px">Need More Analyses?</h3>
+        <p style="color:var(--gray-500);margin-bottom:16px">Subscribe to a plan and save on every report.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <a class="btn btn-primary" data-view="analyze">Analyze Another Policy</a>
+          <a class="btn btn-outline" data-view="pricing">View Plans &amp; Pricing</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ======== PRICING VIEW ======== -->
+<div id="view-pricing" class="view">
+  <section class="page-section">
+    <div class="container" style="max-width:1100px">
+      <h1 class="section-title-center">Simple, Transparent Pricing</h1>
+      <p class="section-subtitle" style="text-align:center;margin-bottom:40px">Start with a free analysis. Pay only when you need more.</p>
+
+      <div class="pricing-grid">
+        <!-- Free -->
+        <div class="pricing-card">
+          <div class="pricing-plan-name">Try It Out</div>
+          <div class="pricing-price"><span class="price-amount">$0</span></div>
+          <div class="pricing-desc">Your first analysis</div>
+          <ul class="pricing-features">
+            <li>1 full policy analysis</li>
+            <li>21-section scoring</li>
+            <li>Risk quantification</li>
+            <li>PDF report</li>
+          </ul>
+          <a href="#register" data-view="register" class="btn btn-outline btn-full guest-cta">Get Started Free</a>
+          <a href="#analyze" data-view="analyze" class="btn btn-outline btn-full auth-cta" style="display:none">Analyze Now</a>
+        </div>
+
+        <!-- Single -->
+        <div class="pricing-card">
+          <div class="pricing-plan-name">Single Report</div>
+          <div class="pricing-price"><span class="price-amount">$49</span></div>
+          <div class="pricing-desc">per analysis</div>
+          <ul class="pricing-features">
+            <li>Full policy analysis</li>
+            <li>21-section scoring</li>
+            <li>Risk quantification</li>
+            <li>PDF report</li>
+            <li>No commitment</li>
+          </ul>
+          <button class="btn btn-outline btn-full btn-checkout" data-plan="single">Buy Single Report</button>
+        </div>
+
+        <!-- Starter (Popular) -->
+        <div class="pricing-card pricing-popular">
+          <div class="pricing-popular-badge">Most Popular</div>
+          <div class="pricing-plan-name">Starter</div>
+          <div class="pricing-price"><span class="price-amount">$99</span><span class="price-period">/mo</span></div>
+          <div class="pricing-desc">5 analyses per month</div>
+          <ul class="pricing-features">
+            <li>5 credits / month</li>
+            <li>All features included</li>
+            <li>Priority processing</li>
+            <li>Email support</li>
+            <li><strong>Save 60% vs. single</strong></li>
+          </ul>
+          <button class="btn btn-primary btn-full btn-checkout" data-plan="starter">Subscribe — $99/mo</button>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card">
+          <div class="pricing-plan-name">Professional</div>
+          <div class="pricing-price"><span class="price-amount">$249</span><span class="price-period">/mo</span></div>
+          <div class="pricing-desc">15 analyses per month</div>
+          <ul class="pricing-features">
+            <li>15 credits / month</li>
+            <li>All features included</li>
+            <li>Priority processing</li>
+            <li>Phone &amp; email support</li>
+            <li><strong>Save 66% vs. single</strong></li>
+          </ul>
+          <button class="btn btn-outline btn-full btn-checkout" data-plan="pro">Subscribe — $249/mo</button>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="pricing-card">
+          <div class="pricing-plan-name">Enterprise</div>
+          <div class="pricing-price"><span class="price-amount">$499</span><span class="price-period">/mo</span></div>
+          <div class="pricing-desc">50 analyses per month</div>
+          <ul class="pricing-features">
+            <li>50 credits / month</li>
+            <li>All features included</li>
+            <li>Dedicated support</li>
+            <li>Custom integrations</li>
+            <li><strong>Save 80% vs. single</strong></li>
+          </ul>
+          <button class="btn btn-outline btn-full btn-checkout" data-plan="enterprise">Subscribe — $499/mo</button>
+        </div>
+      </div>
     </div>
   </section>
 </div>
@@ -506,7 +808,7 @@
           <h3 style="font-size:17px;font-weight:700;color:var(--navy)">Live Log Stream</h3>
           <div style="display:flex;align-items:center;gap:12px">
             <select class="form-select" id="log-analysis-select" style="width:auto;padding:6px 12px;font-size:13px">
-              <option value="">Select an analysis…</option>
+              <option value="">Select an analysis...</option>
             </select>
             <span class="log-status-dot" id="monitor-log-status-dot"></span>
           </div>
@@ -537,7 +839,7 @@
     <div class="container" style="max-width:600px">
       <div class="card">
         <div class="error-state">
-          <div class="error-icon">❌</div>
+          <div class="error-icon">&#10060;</div>
           <h3>Analysis Failed</h3>
           <p id="error-message">An unexpected error occurred.</p>
           <button class="btn btn-primary" id="error-retry">Try Again</button>
@@ -545,6 +847,49 @@
       </div>
     </div>
   </section>
+</div>
+
+<!-- ======== ONBOARDING MODAL ======== -->
+<div class="modal-overlay" id="onboarding-modal" style="display:none">
+  <div class="modal-card">
+    <div class="onboarding-steps" id="onboarding-steps">
+      <div class="onboarding-step active" data-step="1">
+        <div class="onboarding-icon">&#128196;</div>
+        <h3>Upload a Policy</h3>
+        <p>Start by uploading any cyber insurance policy PDF. We support all major carriers and formats.</p>
+      </div>
+      <div class="onboarding-step" data-step="2">
+        <div class="onboarding-icon">&#128269;</div>
+        <h3>AI Analysis</h3>
+        <p>Our engine scores 21 coverage sections, quantifies risk scenarios, and identifies red flags — all in about 5 minutes.</p>
+      </div>
+      <div class="onboarding-step" data-step="3">
+        <div class="onboarding-icon">&#128200;</div>
+        <h3>Get Your Report</h3>
+        <p>Receive a comprehensive analysis with binding recommendations and a professional PDF report. Your first analysis is free!</p>
+      </div>
+    </div>
+    <div class="onboarding-nav">
+      <div class="onboarding-dots">
+        <span class="onboarding-dot active" data-dot="1"></span>
+        <span class="onboarding-dot" data-dot="2"></span>
+        <span class="onboarding-dot" data-dot="3"></span>
+      </div>
+      <div class="onboarding-buttons">
+        <button class="btn btn-sm btn-outline" id="btn-onboarding-skip">Skip</button>
+        <button class="btn btn-sm btn-primary" id="btn-onboarding-next">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== UNLOCK SUCCESS OVERLAY ======== -->
+<div class="modal-overlay" id="unlock-overlay" style="display:none">
+  <div class="unlock-animation-card">
+    <div class="unlock-icon-anim">&#128275;</div>
+    <h2>Report Unlocked!</h2>
+    <p>Loading your full analysis...</p>
+  </div>
 </div>
 
 <!-- ======== Footer ======== -->

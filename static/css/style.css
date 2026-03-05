@@ -923,3 +923,578 @@ img { max-width: 100%; display: block; }
     margin-top: -16px;
   }
 }
+
+
+/* ============================================================
+   CONVERSION OPTIMIZATION — New Styles (v2.0)
+   Teaser, Pricing, Onboarding, Credits, Unlock Animation
+   ============================================================ */
+
+/* --- Nav Credits Badge ----------------------------------- */
+.nav-credits-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(212,168,67,.15); color: var(--gold-light);
+  padding: 4px 12px; border-radius: 100px;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .3px;
+}
+.nav-credits-badge.credits-zero {
+  background: rgba(220,38,38,.15); color: #fca5a5;
+}
+
+/* --- Auth Page Improvements ------------------------------ */
+.auth-container {
+  background: linear-gradient(160deg, var(--navy) 0%, var(--navy-light) 50%, #1a1a35 100%);
+  min-height: calc(100vh - 64px);
+}
+.auth-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+
+.auth-trust-signals {
+  display: flex; gap: 16px; justify-content: center;
+  margin-top: 24px; flex-wrap: wrap;
+}
+.trust-signal {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--gray-500); font-weight: 500;
+}
+.trust-signal .trust-icon {
+  font-size: 14px; opacity: .7;
+}
+
+.auth-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px 0;
+  font-size: 13px; color: var(--gray-400);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--gray-200);
+}
+
+.btn-google {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px 20px;
+  background: var(--white); color: var(--gray-700);
+  border: 1px solid var(--gray-300); border-radius: var(--radius);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font);
+}
+.btn-google:hover {
+  background: var(--gray-50); border-color: var(--gray-400);
+}
+.btn-google img {
+  width: 18px; height: 18px;
+}
+
+.phone-opt-in {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0;
+}
+.phone-opt-in input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--gold);
+}
+.phone-opt-in label {
+  font-size: 13px; color: var(--gray-500);
+}
+
+/* --- Onboarding Modal ------------------------------------ */
+.onboarding-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.6);
+  display: none; align-items: center; justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+.onboarding-card {
+  background: var(--white);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.25);
+  max-width: 520px; width: 100%;
+  padding: 48px 40px 36px;
+  text-align: center;
+  position: relative;
+}
+.onboarding-step {
+  display: none;
+}
+.onboarding-step.active {
+  display: block;
+  animation: fadeInUp .4s ease both;
+}
+.onboarding-step .step-icon {
+  font-size: 56px; margin-bottom: 20px;
+  line-height: 1;
+}
+.onboarding-step h2 {
+  font-size: 22px; font-weight: 800; color: var(--navy);
+  margin-bottom: 12px;
+}
+.onboarding-step p {
+  font-size: 15px; color: var(--gray-500); line-height: 1.7;
+  max-width: 380px; margin: 0 auto 24px;
+}
+.onboarding-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--green-light); color: var(--green);
+  padding: 6px 16px; border-radius: 100px;
+  font-size: 13px; font-weight: 700;
+  margin-bottom: 20px;
+}
+.onboarding-dots {
+  display: flex; gap: 8px; justify-content: center;
+  margin: 20px 0 24px;
+}
+.onboarding-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gray-300); cursor: pointer;
+  transition: all var(--transition);
+}
+.onboarding-dot.active {
+  background: var(--gold); width: 24px; border-radius: 4px;
+}
+.onboarding-actions {
+  display: flex; gap: 12px; justify-content: center;
+}
+.btn-skip {
+  background: none; border: none; color: var(--gray-400);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  font-family: var(--font);
+}
+.btn-skip:hover { color: var(--gray-600); }
+
+/* --- Credit Info on Upload Page --------------------------- */
+.credit-info {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-radius: var(--radius);
+  background: rgba(212,168,67,.08);
+  border: 1px solid rgba(212,168,67,.2);
+  font-size: 13px; font-weight: 600; color: var(--gold-dark);
+  margin-bottom: 20px;
+}
+.credit-info .credit-icon { font-size: 16px; }
+.credit-info.credits-empty {
+  background: rgba(220,38,38,.06);
+  border-color: rgba(220,38,38,.15);
+  color: var(--red);
+}
+
+/* --- Reassurance Strip ----------------------------------- */
+.reassurance-strip {
+  display: flex; gap: 24px; justify-content: center;
+  padding: 16px 0; margin-top: 16px;
+  border-top: 1px solid var(--gray-100);
+  flex-wrap: wrap;
+}
+.reassurance-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--gray-500);
+}
+.reassurance-item .reassurance-icon {
+  font-size: 14px;
+}
+
+/* --- Teaser View ----------------------------------------- */
+.teaser-container {
+  max-width: 760px; margin: 0 auto;
+}
+
+.teaser-header {
+  text-align: center; padding: 40px 0 32px;
+}
+.teaser-header h2 {
+  font-size: 28px; font-weight: 800; color: var(--navy);
+  margin-bottom: 8px;
+}
+.teaser-header p {
+  font-size: 15px; color: var(--gray-500);
+}
+
+.teaser-score-section {
+  text-align: center; padding: 32px 0;
+}
+.teaser-gauge {
+  position: relative; width: 200px; height: 200px; margin: 0 auto 20px;
+}
+.teaser-gauge svg { width: 100%; height: 100%; }
+.teaser-gauge-bg { fill: none; stroke: var(--gray-200); stroke-width: 12; }
+.teaser-gauge-fill {
+  fill: none; stroke-width: 12; stroke-linecap: round;
+  transition: stroke-dashoffset 1.5s ease, stroke .4s ease;
+}
+.teaser-score-value {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.teaser-score-value .score-num {
+  font-size: 52px; font-weight: 800; line-height: 1;
+  color: var(--navy);
+}
+.teaser-score-value .score-max {
+  font-size: 16px; color: var(--gray-400); margin-top: 2px;
+}
+
+/* Blurred / locked sections */
+.teaser-locked {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+.teaser-locked .blur-overlay {
+  filter: blur(6px);
+  pointer-events: none;
+  user-select: none;
+}
+.teaser-locked .lock-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(255,255,255,.65);
+  backdrop-filter: blur(2px);
+  z-index: 2;
+}
+.lock-icon {
+  font-size: 32px; margin-bottom: 8px;
+  opacity: .6;
+}
+.lock-text {
+  font-size: 14px; font-weight: 600; color: var(--gray-600);
+}
+
+/* Teaser stats row */
+.teaser-stats-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 16px; margin: 24px 0;
+}
+.teaser-stat-card {
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 24px;
+  text-align: center; box-shadow: var(--shadow-sm);
+}
+.teaser-stat-value {
+  font-size: 36px; font-weight: 800; line-height: 1.2;
+}
+.teaser-stat-value.stat-red { color: var(--red); }
+.teaser-stat-value.stat-amber { color: var(--amber); }
+.teaser-stat-value.stat-green { color: var(--green); }
+.teaser-stat-label {
+  font-size: 13px; font-weight: 600; color: var(--gray-500);
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-top: 4px;
+}
+
+/* Teaser recommendation (blurred) */
+.teaser-recommendation {
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 24px;
+  margin: 24px 0; min-height: 80px;
+}
+
+/* Teaser urgency hooks */
+.teaser-urgency {
+  display: flex; gap: 12px; justify-content: center;
+  flex-wrap: wrap; margin: 24px 0;
+}
+.urgency-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 100px;
+  font-size: 13px; font-weight: 700;
+}
+.urgency-badge.urgency-red {
+  background: var(--red-light); color: var(--red);
+  border: 1px solid #fecaca;
+}
+.urgency-badge.urgency-amber {
+  background: var(--amber-light); color: var(--amber);
+  border: 1px solid #fde68a;
+}
+.urgency-badge.urgency-blue {
+  background: var(--blue-light); color: var(--blue);
+  border: 1px solid #bfdbfe;
+}
+
+/* --- Sticky CTA Bar -------------------------------------- */
+.sticky-cta-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 150;
+  background: var(--navy);
+  padding: 16px 24px;
+  box-shadow: 0 -4px 20px rgba(0,0,0,.2);
+  display: flex; align-items: center; justify-content: center;
+  gap: 20px; flex-wrap: wrap;
+}
+.sticky-cta-bar .cta-text {
+  color: rgba(255,255,255,.8); font-size: 14px; font-weight: 500;
+}
+.sticky-cta-bar .cta-text strong {
+  color: var(--white); font-weight: 700;
+}
+.sticky-cta-bar .cta-price {
+  font-size: 24px; font-weight: 800; color: var(--gold);
+}
+.sticky-cta-bar .btn-primary {
+  padding: 14px 32px; font-size: 15px;
+}
+
+/* --- Unlock Overlay -------------------------------------- */
+.unlock-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(26,26,46,.85);
+  display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+.unlock-content {
+  text-align: center; color: var(--white);
+}
+.unlock-content .unlock-icon {
+  font-size: 72px; margin-bottom: 20px;
+  animation: unlockBounce 1s ease;
+}
+.unlock-content h2 {
+  font-size: 28px; font-weight: 800; margin-bottom: 12px;
+}
+.unlock-content p {
+  font-size: 16px; color: rgba(255,255,255,.7);
+}
+@keyframes unlockBounce {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Unlock CTA Section ---------------------------------- */
+.teaser-unlock-section {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 100%);
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  text-align: center;
+  margin: 32px 0;
+}
+.teaser-unlock-section h3 {
+  font-size: 22px; font-weight: 800; color: var(--white);
+  margin-bottom: 8px;
+}
+.teaser-unlock-section p {
+  font-size: 14px; color: rgba(255,255,255,.6);
+  margin-bottom: 24px;
+}
+.teaser-unlock-section .unlock-features {
+  display: flex; gap: 16px; justify-content: center;
+  flex-wrap: wrap; margin-bottom: 28px;
+}
+.unlock-feature {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 500; color: rgba(255,255,255,.8);
+}
+.unlock-feature .check-icon { color: var(--gold); }
+
+.unlock-buttons {
+  display: flex; gap: 12px; justify-content: center;
+  flex-wrap: wrap;
+}
+.btn-unlock-credit {
+  background: rgba(255,255,255,.1); color: var(--white);
+  border: 1px solid rgba(255,255,255,.2);
+  padding: 14px 28px; border-radius: 8px;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font);
+}
+.btn-unlock-credit:hover {
+  background: rgba(255,255,255,.18);
+}
+.btn-unlock-credit:disabled,
+.btn-unlock-credit.btn-disabled {
+  opacity: .4; cursor: not-allowed;
+}
+.btn-unlock-purchase {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  color: var(--navy);
+  padding: 14px 32px; border-radius: 8px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  border: none;
+  box-shadow: 0 4px 16px rgba(212,168,67,.35);
+  transition: all var(--transition);
+  font-family: var(--font);
+}
+.btn-unlock-purchase:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(212,168,67,.45);
+}
+
+/* --- Pricing Section ------------------------------------- */
+.pricing-section {
+  padding: 80px 24px;
+  background: var(--off-white);
+}
+.pricing-header {
+  text-align: center; margin-bottom: 48px;
+}
+.pricing-header h2 {
+  font-size: 32px; font-weight: 800; color: var(--navy);
+  margin-bottom: 12px;
+}
+.pricing-header p {
+  font-size: 16px; color: var(--gray-500);
+  max-width: 520px; margin: 0 auto;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px; max-width: 960px; margin: 0 auto;
+}
+.pricing-card {
+  background: var(--white);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 36px 28px;
+  text-align: center;
+  transition: all var(--transition);
+  position: relative;
+}
+.pricing-card:hover {
+  border-color: var(--gold);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+}
+.pricing-card.pricing-featured {
+  border-color: var(--gold);
+  box-shadow: 0 8px 32px rgba(212,168,67,.2);
+}
+.pricing-popular {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  color: var(--navy);
+  padding: 4px 16px; border-radius: 100px;
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.pricing-card h3 {
+  font-size: 20px; font-weight: 700; color: var(--navy);
+  margin-bottom: 8px;
+}
+.pricing-price {
+  font-size: 40px; font-weight: 800; color: var(--navy);
+  line-height: 1.2;
+}
+.pricing-price .currency { font-size: 20px; vertical-align: super; }
+.pricing-price .period {
+  font-size: 14px; font-weight: 500; color: var(--gray-400);
+}
+.pricing-desc {
+  font-size: 14px; color: var(--gray-500);
+  margin: 8px 0 20px;
+}
+.pricing-features {
+  list-style: none; text-align: left;
+  margin-bottom: 28px;
+}
+.pricing-features li {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 0; font-size: 14px; color: var(--gray-600);
+}
+.pricing-features li .check {
+  color: var(--green); font-weight: 700; flex-shrink: 0;
+  margin-top: 1px;
+}
+.pricing-card .btn { width: 100%; }
+
+/* --- Post-Report Actions --------------------------------- */
+.post-report-section {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  margin-top: 32px;
+}
+.post-report-section h3 {
+  font-size: 18px; font-weight: 700; color: var(--navy);
+  margin-bottom: 20px; text-align: center;
+}
+.post-report-actions {
+  display: flex; gap: 12px; justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* --- Upsell Banner --------------------------------------- */
+.upsell-banner {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 100%);
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap;
+  margin-top: 32px;
+}
+.upsell-banner .upsell-text {
+  color: var(--white);
+}
+.upsell-banner .upsell-text h4 {
+  font-size: 18px; font-weight: 700; margin-bottom: 4px;
+}
+.upsell-banner .upsell-text h4 span { color: var(--gold); }
+.upsell-banner .upsell-text p {
+  font-size: 14px; color: rgba(255,255,255,.6);
+}
+
+/* --- Tier Badge ------------------------------------------ */
+.tier-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px; border-radius: 100px;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+.tier-superior { background: var(--green-light); color: var(--green); }
+.tier-above-average { background: #eff6ff; color: #2563eb; }
+.tier-average { background: var(--amber-light); color: var(--amber); }
+.tier-basic { background: var(--red-light); color: var(--red); }
+.tier-no-coverage { background: var(--red-light); color: var(--red); }
+
+/* --- Gap Item -------------------------------------------- */
+.gap-item {
+  padding: 10px 14px;
+  background: var(--red-light);
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  font-size: 14px; color: #991b1b;
+  margin-bottom: 8px;
+}
+
+/* --- Responsive additions -------------------------------- */
+@media (max-width: 768px) {
+  .teaser-stats-row {
+    grid-template-columns: 1fr;
+  }
+  .sticky-cta-bar {
+    flex-direction: column; gap: 12px;
+    padding: 12px 16px;
+  }
+  .sticky-cta-bar .cta-text { text-align: center; }
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+  }
+  .unlock-buttons {
+    flex-direction: column;
+  }
+  .onboarding-card {
+    padding: 32px 24px 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .teaser-gauge {
+    width: 160px; height: 160px;
+  }
+  .teaser-score-value .score-num {
+    font-size: 40px;
+  }
+  .auth-trust-signals {
+    flex-direction: column; align-items: center;
+  }
+}
