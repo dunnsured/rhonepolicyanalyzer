@@ -1,5 +1,7 @@
 /* ============================================================
    RhôneRisk Cyber Insurance Policy Analyzer — Frontend App
+   v2.0 — Conversion optimization: teaser/paywall, pricing,
+   Stripe checkout, onboarding, credit system, admin gating.
    ============================================================ */
 
 (function () {
@@ -8,6 +10,7 @@
   // ---- Auth State --------------------------------------------
   let authToken = null;
   let currentUser = null;
+  let userCredits = 0;
 
   // ---- App State ---------------------------------------------
   let currentView = 'home';
@@ -18,17 +21,18 @@
   let elapsedStart = null;
   let progressSSE = null;
   let monitorSSE = null;
+  let onboardingStep = 1;
 
   const STAGE_LABELS = {
-    pending:              'Pending',
-    extracting:           'Extracting Text',
-    parsing:              'Parsing Policy',
-    scoring:              'Scoring Coverage',
-    post_processing:      'Post-Processing',
-    generating_narrative: 'Generating Narrative',
-    generating_report:    'Generating Report',
-    completed:            'Completed',
-    failed:               'Failed',
+    pending:              'Preparing...',
+    extracting:           'Extracting Text from PDF',
+    parsing:              'Parsing Policy Structure',
+    scoring:              'Scoring 21 Coverage Sections',
+    post_processing:      'Detecting Red Flags & Gaps',
+    generating_narrative: 'Generating Analysis Narrative',
+    generating_report:    'Building PDF Report',
+    completed:            'Analysis Complete!',
+    failed:               'Analysis Failed',
   };
 
   const STAGE_ORDER = [
@@ -66,11 +70,6 @@
     }
   }
 
-  function authHeaders() {
-    const h = { 'Authorization': `Bearer ${authToken}` };
-    return h;
-  }
-
   function authFetch(url, opts = {}) {
     if (!opts.headers) opts.headers = {};
     if (authToken) {
@@ -79,10 +78,16 @@
     return fetch(url, opts);
   }
 
+  function isAdmin() {
+    return currentUser && currentUser.email && currentUser.email.endsWith('@rhonerisk.com');
+  }
+
   function updateAuthUI() {
     const authBtns = $('#nav-auth-buttons');
     const userMenu = $('#nav-user-menu');
     const authOnlyEls = $$('.auth-only');
+    const guestCtas = $$('.guest-cta');
+    const authCtas = $$('.auth-cta');
 
     if (currentUser && authToken) {
       authBtns.style.display = 'none';
@@ -92,17 +97,64 @@
       $('#nav-user-email').textContent = currentUser.email || '';
       $('#user-avatar').textContent = (name[0] || 'U').toUpperCase();
       authOnlyEls.forEach(el => el.style.display = '');
+      guestCtas.forEach(el => el.style.display = 'none');
+      authCtas.forEach(el => el.style.display = '');
+
+      // Hide Monitor from non-admin users
+      const monitorLink = $('a[data-view="monitor"]');
+      if (monitorLink) {
+        monitorLink.style.display = isAdmin() ? '' : 'none';
+      }
+
+      // Update credits badge
+      updateCreditsDisplay();
     } else {
       authBtns.style.display = 'flex';
       userMenu.style.display = 'none';
       authOnlyEls.forEach(el => el.style.display = 'none');
+      guestCtas.forEach(el => el.style.display = '');
+      authCtas.forEach(el => el.style.display = 'none');
     }
+  }
+
+  function updateCreditsDisplay() {
+    const badge = $('#nav-credits-badge');
+    if (badge) {
+      badge.textContent = `${userCredits} credit${userCredits !== 1 ? 's' : ''}`;
+      badge.className = 'nav-credits-badge' + (userCredits <= 0 ? ' credits-zero' : '');
+    }
+    const dashBadge = $('#dash-credits-badge');
+    if (dashBadge) {
+      dashBadge.textContent = `${userCredits} credit${userCredits !== 1 ? 's' : ''}`;
+    }
+    // Update analyze page credit info
+    const creditText = $('#credit-info-text');
+    if (creditText) {
+      if (userCredits > 0) {
+        creditText.textContent = `${userCredits} credit${userCredits !== 1 ? 's' : ''} available`;
+        creditText.parentElement.classList.remove('credits-empty');
+      } else {
+        creditText.textContent = 'No credits — purchase required after free analysis';
+        creditText.parentElement.classList.add('credits-empty');
+      }
+    }
+  }
+
+  async function fetchCredits() {
+    if (!authToken) return;
+    try {
+      const res = await authFetch('/api/v1/billing/credits');
+      if (res.ok) {
+        const data = await res.json();
+        userCredits = data.credits || 0;
+        updateCreditsDisplay();
+      }
+    } catch { /* ignore */ }
   }
 
   async function initAuth() {
     const session = getStoredSession();
     if (session && session.access_token) {
-      // Validate the token with the backend
       try {
         const res = await fetch('/api/v1/auth/me', {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -113,17 +165,17 @@
           currentUser = data.user || data;
           storeSession(session);
           updateAuthUI();
+          fetchCredits();
           return true;
         } else {
-          // Try refresh
           if (session.refresh_token) {
             const refreshed = await refreshSession(session.refresh_token);
             if (refreshed) {
               updateAuthUI();
+              fetchCredits();
               return true;
             }
           }
-          // Token invalid
           storeSession(null);
           authToken = null;
           currentUser = null;
@@ -173,7 +225,7 @@
 
     errorEl.style.display = 'none';
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner spinner-gold"></span> Signing in…';
+    btn.innerHTML = '<span class="spinner spinner-gold"></span> Signing in...';
 
     try {
       const res = await fetch('/api/v1/auth/login', {
@@ -193,6 +245,7 @@
         user: data.user,
       });
       updateAuthUI();
+      fetchCredits();
       toast('Signed in successfully!');
       navigate('dashboard');
     } catch (err) {
@@ -209,7 +262,8 @@
     const name = $('#register-name').value.trim();
     const email = $('#register-email').value.trim();
     const password = $('#register-password').value;
-    const confirm = $('#register-confirm').value;
+    const phone = $('#register-phone') ? $('#register-phone').value.trim() : '';
+    const smsOptIn = $('#register-sms-optin') ? $('#register-sms-optin').checked : false;
     const errorEl = $('#register-error');
     const successEl = $('#register-success');
     const btn = $('#register-btn');
@@ -217,20 +271,20 @@
     errorEl.style.display = 'none';
     successEl.style.display = 'none';
 
-    if (password !== confirm) {
-      errorEl.textContent = 'Passwords do not match.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner spinner-gold"></span> Creating account…';
+    btn.innerHTML = '<span class="spinner spinner-gold"></span> Creating account...';
 
     try {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, display_name: name }),
+        body: JSON.stringify({
+          email,
+          password,
+          display_name: name,
+          phone: phone,
+          sms_opt_in: smsOptIn,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -238,7 +292,6 @@
       }
 
       if (data.access_token) {
-        // Auto-confirmed — log in directly
         authToken = data.access_token;
         currentUser = data.user;
         storeSession({
@@ -247,13 +300,17 @@
           user: data.user,
         });
         updateAuthUI();
-        toast('Account created! Welcome to RhôneRisk.');
+        fetchCredits();
+        toast('Account created! Welcome to RhoneRisk.');
+
+        // Show onboarding for first-time users
+        if (!localStorage.getItem('rhone_onboarded')) {
+          showOnboarding();
+        }
         navigate('dashboard');
       } else {
-        // Email confirmation required
         successEl.innerHTML = 'Account created! Please check your email to confirm your account, then <a href="#login" data-view="login">sign in</a>.';
         successEl.style.display = 'block';
-        // Attach click handler to the link
         const link = successEl.querySelector('a');
         if (link) link.addEventListener('click', (ev) => { ev.preventDefault(); navigate('login'); });
       }
@@ -262,26 +319,62 @@
       errorEl.style.display = 'block';
     } finally {
       btn.disabled = false;
-      btn.innerHTML = 'Create Account';
+      btn.innerHTML = 'Create Account &amp; Start Free';
     }
   }
 
   function handleLogout() {
     authToken = null;
     currentUser = null;
+    userCredits = 0;
     storeSession(null);
     updateAuthUI();
     toast('Signed out successfully.');
     navigate('home');
   }
 
+  // ---- Onboarding Modal -------------------------------------
+  function showOnboarding() {
+    const modal = $('#onboarding-modal');
+    if (!modal) return;
+    onboardingStep = 1;
+    updateOnboardingStep();
+    modal.style.display = 'flex';
+  }
+
+  function updateOnboardingStep() {
+    $$('.onboarding-step').forEach(s => {
+      s.classList.toggle('active', parseInt(s.dataset.step) === onboardingStep);
+    });
+    $$('.onboarding-dot').forEach(d => {
+      d.classList.toggle('active', parseInt(d.dataset.dot) === onboardingStep);
+    });
+    const nextBtn = $('#btn-onboarding-next');
+    if (nextBtn) {
+      nextBtn.textContent = onboardingStep >= 3 ? 'Get Started' : 'Next';
+    }
+  }
+
+  function closeOnboarding() {
+    const modal = $('#onboarding-modal');
+    if (modal) modal.style.display = 'none';
+    localStorage.setItem('rhone_onboarded', '1');
+  }
+
   // ---- Navigation -------------------------------------------
   function navigate(view) {
     // Auth guard: protected views require login
-    const protectedViews = ['dashboard', 'analyze', 'progress', 'results', 'monitor'];
+    const protectedViews = ['dashboard', 'analyze', 'progress', 'results', 'teaser', 'monitor'];
     if (protectedViews.includes(view) && !authToken) {
       toast('Please sign in to access this feature.', true);
       navigate('login');
+      return;
+    }
+
+    // Admin guard: monitor requires @rhonerisk.com
+    if (view === 'monitor' && !isAdmin()) {
+      toast('Monitor dashboard is restricted to admin users.', true);
+      navigate('dashboard');
       return;
     }
 
@@ -296,7 +389,7 @@
     currentView = view;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (['home', 'login', 'register'].includes(view)) {
+    if (['home', 'login', 'register', 'pricing'].includes(view)) {
       history.replaceState(null, '', view === 'home' ? '/' : `#${view}`);
     } else {
       history.replaceState(null, '', `#${view}`);
@@ -304,6 +397,7 @@
 
     if (view === 'dashboard') loadDashboard();
     if (view === 'monitor') loadMonitorData();
+    if (view === 'analyze') fetchCredits();
   }
 
   // ---- Toast ------------------------------------------------
@@ -346,6 +440,16 @@
     return `<span class="status-badge ${cls}">${status}</span>`;
   }
 
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max) + '...' : str;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   // ---- File handling ----------------------------------------
   function setupDropzone() {
     const zone = $('#dropzone');
@@ -366,7 +470,7 @@
       selectedFile = file;
       zone.classList.add('has-file');
       info.innerHTML = `
-        <span class="file-name">${file.name}</span>
+        <span class="file-name">${escapeHtml(file.name)}</span>
         <span class="file-size">(${(file.size / 1024 / 1024).toFixed(1)} MB)</span>
         <button class="remove-file" id="remove-file">Remove</button>
       `;
@@ -393,7 +497,7 @@
     });
   }
 
-  // ---- Submit -----------------------------------------------
+  // ---- Submit Analysis --------------------------------------
   async function submitAnalysis(e) {
     e.preventDefault();
     if (!authToken) { toast('Please sign in first.', true); navigate('login'); return; }
@@ -401,16 +505,16 @@
 
     const btn = $('#submit-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner spinner-gold"></span> Uploading…';
+    btn.innerHTML = '<span class="spinner spinner-gold"></span> Uploading...';
 
     const form = new FormData();
     form.append('file', selectedFile);
-    form.append('client_name', $('#client_name').value);
-    form.append('industry', $('#industry').value);
-    form.append('annual_revenue', $('#annual_revenue').value);
-    form.append('employee_count', $('#employee_count').value);
-    form.append('is_msp', $('#is_msp').checked ? 'true' : 'false');
-    form.append('notes', $('#notes').value);
+    form.append('client_name', ($('#client_name') || {}).value || '');
+    form.append('industry', ($('#industry') || {}).value || '');
+    form.append('annual_revenue', ($('#annual_revenue') || {}).value || '');
+    form.append('employee_count', ($('#employee_count') || {}).value || '');
+    form.append('is_msp', ($('#is_msp') || {}).checked ? 'true' : 'false');
+    form.append('notes', ($('#notes') || {}).value || '');
 
     try {
       const res = await authFetch('/api/v1/analyze', { method: 'POST', body: form });
@@ -429,7 +533,7 @@
       toast(err.message, true);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '⬆ Upload &amp; Analyze';
+      btn.innerHTML = '&#11014; Upload &amp; Analyze';
     }
   }
 
@@ -450,9 +554,7 @@
     const el = $('#progress-elapsed');
     if (!el) return;
     const secs = (Date.now() - elapsedStart) / 1000;
-    const stageEl = $('#progress-stage');
-    const stageName = stageEl ? stageEl.textContent : '';
-    el.textContent = `${stageName}… ${formatElapsed(secs)} elapsed`;
+    el.textContent = `Elapsed: ${formatElapsed(secs)}`;
   }
 
   // ---- Progress SSE Log Stream ------------------------------
@@ -463,16 +565,15 @@
     if (!viewer || !analysisId) return;
 
     viewer.innerHTML = '';
-    dot.className = 'log-status-dot connected';
+    if (dot) dot.className = 'log-status-dot connected';
 
-    // SSE with auth via query param (EventSource doesn't support headers)
     const url = `/api/v1/analyze/${analysisId}/logs` + (authToken ? `?token=${encodeURIComponent(authToken)}` : '');
     progressSSE = new EventSource(url);
     progressSSE.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'close') {
-          dot.className = 'log-status-dot disconnected';
+          if (dot) dot.className = 'log-status-dot disconnected';
           progressSSE.close();
           progressSSE = null;
           return;
@@ -481,7 +582,7 @@
       } catch (e) { /* ignore parse errors */ }
     };
     progressSSE.onerror = () => {
-      dot.className = 'log-status-dot disconnected';
+      if (dot) dot.className = 'log-status-dot disconnected';
     };
   }
 
@@ -493,12 +594,6 @@
     div.innerHTML = `<span class="log-time">${ts}</span> <span class="${levelCls}">[${entry.level}]</span> <span class="log-stage">${entry.stage || ''}</span> <span class="log-msg">${escapeHtml(entry.message || '')}</span>`;
     viewer.appendChild(div);
     viewer.scrollTop = viewer.scrollHeight;
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   // ---- Polling ----------------------------------------------
@@ -524,8 +619,12 @@
         stopElapsedTimer();
         const el = $('#progress-elapsed');
         if (el) el.textContent = `Completed in ${formatDuration(data.elapsed_seconds || 0)}`;
-        await loadResults();
-        setTimeout(() => navigate('results'), 1500);
+
+        // Refresh credits after analysis
+        await fetchCredits();
+
+        // Check if analysis is unlocked or needs teaser
+        await showCompletedAnalysis();
       } else if (data.status === 'failed') {
         clearInterval(pollTimer);
         pollTimer = null;
@@ -536,6 +635,33 @@
       }
     } catch (err) {
       /* ignore transient errors */
+    }
+  }
+
+  async function showCompletedAnalysis() {
+    // Check teaser status
+    try {
+      const res = await authFetch(`/api/v1/analyze/${analysisId}/teaser`);
+      if (res.ok) {
+        const teaser = await res.json();
+        if (teaser.unlocked) {
+          // Already unlocked — show full results
+          await loadResults();
+          setTimeout(() => navigate('results'), 1500);
+        } else {
+          // Show teaser view
+          renderTeaser(teaser);
+          setTimeout(() => navigate('teaser'), 1500);
+        }
+      } else {
+        // Fallback: try loading full results directly
+        await loadResults();
+        setTimeout(() => navigate('results'), 1500);
+      }
+    } catch {
+      // Fallback
+      await loadResults();
+      setTimeout(() => navigate('results'), 1500);
     }
   }
 
@@ -553,7 +679,7 @@
     }
     if (pctEl) pctEl.textContent = pct;
     if (stageEl) stageEl.textContent = STAGE_LABELS[status] || status;
-    if (detailEl) detailEl.textContent = status === 'completed' ? 'Analysis complete!' : `Processing…`;
+    if (detailEl) detailEl.textContent = status === 'completed' ? 'Analysis complete!' : 'Processing...';
     if (idEl && analysisId) idEl.textContent = analysisId;
 
     // Update step dots
@@ -565,6 +691,152 @@
       else if (i === idx) step.classList.add('active');
     });
     if (status === 'completed') steps.forEach(s => s.classList.add('done'));
+  }
+
+  // ---- Teaser View ------------------------------------------
+  function renderTeaser(data) {
+    const score = data.overall_score || 0;
+    const rating = data.rating || '—';
+
+    // Score gauge
+    const fill = $('#teaser-gauge-fill');
+    if (fill) {
+      const circ = 2 * Math.PI * 88;
+      fill.style.strokeDashoffset = circ - (circ * score / 10);
+      fill.style.stroke = score >= 7 ? 'var(--green)' : score >= 4 ? 'var(--gold)' : 'var(--red)';
+    }
+    const scoreNum = $('#teaser-score-num');
+    if (scoreNum) scoreNum.textContent = score.toFixed(1);
+
+    // Rating badge
+    const badge = $('#teaser-rating-badge');
+    if (badge) {
+      badge.textContent = rating;
+      badge.className = 'rating-badge';
+      if (rating.toLowerCase().includes('superior')) badge.classList.add('rating-superior');
+      else if (rating.toLowerCase().includes('average')) badge.classList.add('rating-average');
+      else if (rating.toLowerCase().includes('basic')) badge.classList.add('rating-basic');
+      else badge.classList.add('rating-none');
+    }
+
+    // Stats
+    const rfEl = $('#teaser-red-flags');
+    if (rfEl) rfEl.textContent = data.red_flag_count || 0;
+    const gapEl = $('#teaser-gaps');
+    if (gapEl) gapEl.textContent = data.critical_gap_count || 0;
+    const recEl = $('#teaser-recommendation');
+    if (recEl) {
+      const rec = data.binding_recommendation || '—';
+      recEl.textContent = typeof rec === 'string' ? rec : (rec.recommendation || '—');
+    }
+
+    // Client name
+    const clientEl = $('#teaser-client-name');
+    if (clientEl) clientEl.textContent = data.client_name ? `Analysis for ${data.client_name}` : 'Your analysis results are ready';
+
+    // Credit info on unlock button
+    const creditSpan = $('#teaser-credit-remaining');
+    if (creditSpan) {
+      creditSpan.textContent = userCredits > 0 ? `(${userCredits} available)` : '(0 available)';
+    }
+
+    // Update button states
+    const creditBtn = $('#btn-unlock-credit');
+    if (creditBtn) {
+      creditBtn.disabled = userCredits <= 0;
+      if (userCredits <= 0) {
+        creditBtn.textContent = 'No Credits Available';
+        creditBtn.classList.add('btn-disabled');
+      }
+    }
+  }
+
+  async function unlockWithCredit() {
+    if (!analysisId) return;
+    try {
+      const res = await authFetch(`/api/v1/billing/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis_id: analysisId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Show unlock animation
+        showUnlockAnimation();
+        // Update credits
+        if (data.credits_remaining !== undefined) {
+          userCredits = data.credits_remaining;
+          updateCreditsDisplay();
+        }
+        // Load full results
+        await loadResults();
+        setTimeout(() => {
+          hideUnlockAnimation();
+          navigate('results');
+        }, 2000);
+      } else {
+        toast(data.error || 'Failed to unlock report.', true);
+      }
+    } catch (err) {
+      toast('Failed to unlock report. Please try again.', true);
+    }
+  }
+
+  async function unlockWithPurchase() {
+    if (!analysisId || !authToken) return;
+    try {
+      const res = await authFetch('/api/v1/billing/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: 'single',
+          analysis_id: analysisId,
+        }),
+      });
+      const data = await res.json();
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        toast(data.error || 'Failed to create checkout session.', true);
+      }
+    } catch (err) {
+      toast('Failed to start checkout. Please try again.', true);
+    }
+  }
+
+  function showUnlockAnimation() {
+    const overlay = $('#unlock-overlay');
+    if (overlay) overlay.style.display = 'flex';
+  }
+
+  function hideUnlockAnimation() {
+    const overlay = $('#unlock-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  // ---- Pricing / Checkout -----------------------------------
+  async function handleCheckout(plan) {
+    if (!authToken) {
+      toast('Please sign in or create an account first.', true);
+      navigate('register');
+      return;
+    }
+
+    try {
+      const res = await authFetch('/api/v1/billing/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        toast(data.error || 'Failed to create checkout session.', true);
+      }
+    } catch (err) {
+      toast('Failed to start checkout. Please try again.', true);
+    }
   }
 
   // ---- Load Results -----------------------------------------
@@ -612,12 +884,12 @@
       const recText = rec.recommendation || rec || '—';
       const rationale = rec.rationale || '';
       let recClass = 'rec-caution';
-      let icon = '⚠️';
+      let icon = '&#9888;&#65039;';
       const recLower = (typeof recText === 'string' ? recText : '').toLowerCase();
       if (recLower.includes('bind') && !recLower.includes('not') && !recLower.includes('caution') && !recLower.includes('modif')) {
-        recClass = 'rec-bind'; icon = '✅';
-      } else if (recLower.includes('decline') || recLower.includes('not recommend')) {
-        recClass = 'rec-decline'; icon = '❌';
+        recClass = 'rec-bind'; icon = '&#9989;';
+      } else if (recLower.includes('declin') || recLower.includes('not bind') || recLower.includes('do not')) {
+        recClass = 'rec-decline'; icon = '&#10060;';
       }
       recEl.className = `recommendation-card ${recClass}`;
       recEl.innerHTML = `<span class="rec-icon">${icon}</span><div><strong>${escapeHtml(typeof recText === 'string' ? recText : JSON.stringify(recText))}</strong>${rationale ? `<p style="margin-top:8px;font-size:14px;opacity:.85">${escapeHtml(rationale)}</p>` : ''}</div>`;
@@ -664,14 +936,13 @@
     if (rfEl) rfEl.textContent = data.red_flag_count || 0;
     const gapsEl = $('#critical-gaps');
     if (gapsEl && data.critical_gaps) {
-      gapsEl.innerHTML = data.critical_gaps.map(g => `<div class="gap-item">⚠ ${escapeHtml(g)}</div>`).join('');
+      gapsEl.innerHTML = data.critical_gaps.map(g => `<div class="gap-item">&#9888; ${escapeHtml(g)}</div>`).join('');
     }
 
     // Download button
     const dlBtn = $('#download-btn');
     if (dlBtn) {
       dlBtn.onclick = () => {
-        // Use auth token in download
         window.open(`/api/v1/analyze/${analysisId}/report?token=${encodeURIComponent(authToken)}`, '_blank');
       };
     }
@@ -784,7 +1055,7 @@
       } else if (a.status === 'failed') {
         actionsHtml = `<span style="font-size:12px;color:var(--red)">Failed</span>`;
       } else {
-        actionsHtml = `<span style="font-size:12px;color:var(--amber)">In progress\u2026</span>`;
+        actionsHtml = `<span style="font-size:12px;color:var(--amber)">In progress...</span>`;
       }
 
       tr.innerHTML = `
@@ -800,11 +1071,30 @@
       tbody.appendChild(tr);
     });
 
-    // Wire up view buttons to show results
+    // Wire up view buttons
     $$('.dash-view-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         analysisId = btn.dataset.id;
-        loadResults().then(() => navigate('results'));
+        // Check if unlocked
+        try {
+          const res = await authFetch(`/api/v1/analyze/${analysisId}/teaser`);
+          if (res.ok) {
+            const teaser = await res.json();
+            if (teaser.unlocked) {
+              await loadResults();
+              navigate('results');
+            } else {
+              renderTeaser(teaser);
+              navigate('teaser');
+            }
+          } else {
+            await loadResults();
+            navigate('results');
+          }
+        } catch {
+          await loadResults();
+          navigate('results');
+        }
       });
     });
   }
@@ -857,7 +1147,7 @@
     const logSelect = $('#log-analysis-select');
     if (logSelect) {
       const prevVal = logSelect.value;
-      logSelect.innerHTML = '<option value="">Select an analysis…</option>';
+      logSelect.innerHTML = '<option value="">Select an analysis...</option>';
       list.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.analysis_id;
@@ -915,10 +1205,6 @@
     $$('.detail-btn').forEach(btn => {
       btn.addEventListener('click', () => showDetail(btn.dataset.id));
     });
-  }
-
-  function truncate(str, max) {
-    return str.length > max ? str.slice(0, max) + '…' : str;
   }
 
   // ---- Detail Modal -----------------------------------------
@@ -1018,12 +1304,37 @@
     };
   }
 
+  // ---- Handle URL params (checkout success, etc.) -----------
+  function handleUrlParams() {
+    const hash = location.hash;
+    const params = new URLSearchParams(hash.includes('?') ? hash.split('?')[1] : '');
+
+    // Handle checkout success redirect
+    const sessionId = params.get('session_id');
+    if (sessionId) {
+      const aid = params.get('analysis_id');
+      if (aid) {
+        // Single report purchase success
+        analysisId = aid;
+        toast('Payment successful! Loading your full report...');
+        fetchCredits();
+        loadResults().then(() => navigate('results'));
+      } else {
+        // Subscription purchase success
+        toast('Subscription activated! Credits have been added to your account.');
+        fetchCredits();
+      }
+      // Clean up URL
+      history.replaceState(null, '', hash.split('?')[0]);
+    }
+  }
+
   // ---- Init -------------------------------------------------
   document.addEventListener('DOMContentLoaded', async () => {
     // Initialize auth
     await initAuth();
 
-    // Navigation
+    // Navigation — all [data-view] elements
     $$('[data-view]').forEach(el => {
       el.addEventListener('click', e => {
         e.preventDefault();
@@ -1040,16 +1351,6 @@
 
     const logoutBtn = $('#logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
-
-    // Handle hash — if logged in and no specific hash, go to dashboard
-    const hash = location.hash.replace('#', '');
-    if (hash && $(`#view-${hash}`)) {
-      navigate(hash);
-    } else if (authToken) {
-      navigate('dashboard');
-    } else {
-      navigate('home');
-    }
 
     // Dropzone
     setupDropzone();
@@ -1110,6 +1411,63 @@
           $('#detail-overlay').style.display = 'none';
         }
       });
+    }
+
+    // Teaser unlock buttons
+    if ($('#btn-unlock-credit')) {
+      $('#btn-unlock-credit').addEventListener('click', unlockWithCredit);
+    }
+    if ($('#btn-unlock-purchase')) {
+      $('#btn-unlock-purchase').addEventListener('click', unlockWithPurchase);
+    }
+
+    // Pricing checkout buttons
+    $$('.btn-checkout').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const plan = btn.dataset.plan;
+        if (plan) handleCheckout(plan);
+      });
+    });
+
+    // Onboarding modal
+    if ($('#btn-onboarding-next')) {
+      $('#btn-onboarding-next').addEventListener('click', () => {
+        if (onboardingStep >= 3) {
+          closeOnboarding();
+        } else {
+          onboardingStep++;
+          updateOnboardingStep();
+        }
+      });
+    }
+    if ($('#btn-onboarding-skip')) {
+      $('#btn-onboarding-skip').addEventListener('click', closeOnboarding);
+    }
+    // Click dots to navigate
+    $$('.onboarding-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        onboardingStep = parseInt(dot.dataset.dot);
+        updateOnboardingStep();
+      });
+    });
+    // Close onboarding on overlay click
+    if ($('#onboarding-modal')) {
+      $('#onboarding-modal').addEventListener('click', (e) => {
+        if (e.target === $('#onboarding-modal')) closeOnboarding();
+      });
+    }
+
+    // Handle URL params (checkout success redirects)
+    handleUrlParams();
+
+    // Handle hash — if logged in and no specific hash, go to dashboard
+    const hash = location.hash.replace('#', '').split('?')[0];
+    if (hash && $(`#view-${hash}`)) {
+      navigate(hash);
+    } else if (authToken) {
+      navigate('dashboard');
+    } else {
+      navigate('home');
     }
   });
 

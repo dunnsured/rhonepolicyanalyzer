@@ -23,21 +23,31 @@
     <div class="cover-classification">CONFIDENTIAL — CLIENT USE ONLY</div>
 </div>
 
-{# ===== EXECUTIVE SUMMARY ===== #}
+{# ===== 1. EXECUTIVE SUMMARY ===== #}
 <div class="section">
-    <h1>Executive Summary</h1>
+    <h1>1. Executive Summary</h1>
 
     <div class="section-content">
         {{ sections.executive_summary | md_to_html }}
     </div>
 
-    <div class="overall-score-container">
-        <div class="overall-score-number {{ score_color(overall_score | round | int) }}">
-            {{ "%.1f" | format(overall_score) }}/10
+    {# Key Metrics Dashboard #}
+    <div class="key-metrics-dashboard">
+        <div class="metric-card">
+            <div class="metric-value {{ score_color(overall_score | round | int) }}">{{ "%.1f" | format(overall_score) }}/10</div>
+            <div class="metric-label">Overall Maturity Score</div>
         </div>
-        <div class="overall-score-details">
-            <div class="overall-score-label">Overall Policy Maturity Score</div>
-            <div class="overall-score-rating">{{ overall_rating }}</div>
+        <div class="metric-card">
+            <div class="metric-value">{{ scores | length }}</div>
+            <div class="metric-label">Coverages Scored</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value score-nocoverage">{{ red_flag_count }}</div>
+            <div class="metric-label">Red Flags</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value score-nocoverage">{{ critical_gaps | length }}</div>
+            <div class="metric-label">Critical Gaps</div>
         </div>
     </div>
 
@@ -54,9 +64,9 @@
     </div>
 </div>
 
-{# ===== POLICY OVERVIEW ===== #}
+{# ===== 2. POLICY OVERVIEW ===== #}
 <div class="section page-break">
-    <h1>Policy Overview</h1>
+    <h1>2. Policy Overview</h1>
 
     {# Key metrics bar #}
     <div class="policy-metrics">
@@ -95,9 +105,9 @@
     {% endif %}
 </div>
 
-{# ===== THIRD-PARTY LIABILITY COVERAGES ===== #}
+{# ===== 3. THIRD-PARTY LIABILITY COVERAGES ===== #}
 <div class="section page-break">
-    <h1>Third-Party Liability Coverages — Maturity Analysis</h1>
+    <h1>3. Third-Party Liability Coverages — Maturity Analysis</h1>
     <div class="category-label">LIABILITY COVERAGES</div>
 
     {% for s in third_party_scores %}
@@ -139,11 +149,10 @@
     {% endif %}
 </div>
 
-{# ===== FIRST-PARTY COVERAGES ===== #}
+{# ===== 4. FIRST-PARTY COVERAGES ===== #}
 <div class="section page-break">
-    <h1>First-Party Coverages — Maturity Analysis</h1>
+    <h1>4. First-Party Coverages — Maturity Analysis</h1>
 
-    {# Group first-party by subcategory #}
     {% set subcategory_order = ['incident_response', 'regulatory', 'business_interruption', 'extortion', 'additional'] %}
     {% set subcategory_labels = {
         'incident_response': 'INCIDENT RESPONSE & BREACH COSTS',
@@ -189,7 +198,6 @@
         </div>
         {% endfor %}
 
-        {# Subcategory Key Findings #}
         {% set subcat_summary = category_summaries_map.get(subcat) %}
         {% if subcat_summary %}
         <div class="key-findings-box">
@@ -207,10 +215,10 @@
     {% endfor %}
 </div>
 
-{# ===== CYBER CRIME / eCRIME COVERAGES ===== #}
+{# ===== 5. eCRIME COVERAGES ===== #}
 {% if cyber_crime_scores %}
 <div class="section page-break">
-    <h1>eCrime Coverages — Maturity Analysis</h1>
+    <h1>5. eCrime Coverages — Maturity Analysis</h1>
     <div class="category-label">eCRIME COVERAGES</div>
 
     {% for s in cyber_crime_scores %}
@@ -237,7 +245,6 @@
     </div>
     {% endfor %}
 
-    {# eCrime Key Findings #}
     {% set ecrime_summary = category_summaries_map.get('ecrime') or category_summaries_map.get('cyber_crime') %}
     {% if ecrime_summary %}
     <div class="key-findings-box">
@@ -253,9 +260,9 @@
 </div>
 {% endif %}
 
-{# ===== OVERALL POLICY ASSESSMENT ===== #}
+{# ===== 6. OVERALL POLICY ASSESSMENT ===== #}
 <div class="section page-break">
-    <h1>Overall Policy Assessment &amp; Maturity Summary</h1>
+    <h1>6. Overall Policy Assessment &amp; Maturity Summary</h1>
 
     {# Strengths vs Enhancement two-column layout #}
     {% if sections.policy_strengths or sections.areas_for_enhancement %}
@@ -304,10 +311,75 @@
     {% endif %}
 </div>
 
-{# ===== STRATEGIC RECOMMENDATIONS ===== #}
+{# ===== 7. EXCLUSION ANALYSIS ===== #}
+{% if sections.exclusion_analysis %}
+<div class="section page-break">
+    <h1>7. Exclusion Analysis</h1>
+    <div class="section-content">
+        {{ sections.exclusion_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== 8. GAP ANALYSIS ===== #}
+<div class="section page-break">
+    <h1>8. Coverage Gap Analysis</h1>
+
+    {% if critical_gaps %}
+    <h2>Critical Gaps</h2>
+    {% for gap in critical_gaps %}
+    <div class="red-flag-alert">{{ gap }}</div>
+    {% endfor %}
+    {% endif %}
+
+    {% if sections.gap_analysis %}
+    <div class="section-content">
+        {{ sections.gap_analysis | md_to_html }}
+    </div>
+    {% endif %}
+</div>
+
+{# ===== 9. RED FLAG SUMMARY ===== #}
+{% if sections.red_flag_summary %}
+<div class="section page-break">
+    <h1>9. Red Flag Summary</h1>
+    <div class="section-content">
+        {{ sections.red_flag_summary | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== 10. RISK QUANTIFICATION & SCENARIO ANALYSIS ===== #}
+{% if risk_quantification_html %}
+<div class="section page-break">
+    <h1>10. Risk Quantification &amp; Scenario Analysis</h1>
+    <div class="section-content">
+        {{ risk_quantification_html }}
+    </div>
+</div>
+{% elif sections.scenario_analysis %}
+<div class="section page-break">
+    <h1>10. Risk Quantification &amp; Scenario Analysis</h1>
+    <div class="section-content">
+        {{ sections.scenario_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== 11. POLICY TERMS & CRITICAL FEATURES ===== #}
+{% if sections.policy_terms_analysis %}
+<div class="section page-break">
+    <h1>11. Policy Terms &amp; Critical Features</h1>
+    <div class="section-content">
+        {{ sections.policy_terms_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== 12. STRATEGIC RECOMMENDATIONS ===== #}
 {% if strategic_recommendations %}
 <div class="section page-break">
-    <h1>Strategic Recommendations</h1>
+    <h1>12. Strategic Recommendations</h1>
 
     {% set immediate_recs = [] %}
     {% set medium_recs = [] %}
@@ -343,13 +415,31 @@
     </div>
     {% endfor %}
     {% endif %}
+
+    {# Recommendations table from narrative #}
+    {% if sections.recommendations %}
+    <h2>Prioritized Recommendations</h2>
+    <div class="section-content">
+        {{ sections.recommendations | md_to_html }}
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
-{# ===== RISK MANAGEMENT ===== #}
+{# ===== 13. COST-BENEFIT ANALYSIS ===== #}
+{% if sections.cost_benefit_analysis %}
+<div class="section page-break">
+    <h1>13. Cost-Benefit Analysis</h1>
+    <div class="section-content">
+        {{ sections.cost_benefit_analysis | md_to_html }}
+    </div>
+</div>
+{% endif %}
+
+{# ===== 14. RISK MANAGEMENT ===== #}
 {% if sections.risk_management_items %}
 <div class="section page-break">
-    <h1>Risk Management &amp; Loss Control</h1>
+    <h1>14. Risk Management &amp; Loss Control</h1>
     {% for idx in range(sections.risk_management_items | length) %}
     <div class="risk-mgmt-item">
         <div class="risk-mgmt-number">{{ idx + 1 }}</div>
@@ -359,67 +449,9 @@
 </div>
 {% endif %}
 
-{# ===== EXCLUSION ANALYSIS ===== #}
-{% if sections.exclusion_analysis %}
+{# ===== 15. FINAL BINDING RECOMMENDATION ===== #}
 <div class="section page-break">
-    <h1>Exclusion Analysis</h1>
-    <div class="section-content">
-        {{ sections.exclusion_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== GAP ANALYSIS ===== #}
-<div class="section page-break">
-    <h1>Coverage Gap Analysis</h1>
-
-    {% if critical_gaps %}
-    <h2>Critical Gaps</h2>
-    {% for gap in critical_gaps %}
-    <div class="red-flag-alert">{{ gap }}</div>
-    {% endfor %}
-    {% endif %}
-
-    {% if sections.gap_analysis %}
-    <div class="section-content">
-        {{ sections.gap_analysis | md_to_html }}
-    </div>
-    {% endif %}
-</div>
-
-{# ===== RED FLAG SUMMARY ===== #}
-{% if sections.red_flag_summary %}
-<div class="section page-break">
-    <h1>Red Flag Summary</h1>
-    <div class="section-content">
-        {{ sections.red_flag_summary | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== SCENARIO ANALYSIS ===== #}
-{% if sections.scenario_analysis %}
-<div class="section page-break">
-    <h1>Risk Quantification &amp; Scenario Analysis</h1>
-    <div class="section-content">
-        {{ sections.scenario_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== BENCHMARKING ===== #}
-{% if sections.benchmarking_analysis %}
-<div class="section page-break">
-    <h1>Benchmarking Analysis</h1>
-    <div class="section-content">
-        {{ sections.benchmarking_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{# ===== FINAL BINDING RECOMMENDATION ===== #}
-<div class="section page-break">
-    <h1>Final Recommendation</h1>
+    <h1>15. Final Recommendation</h1>
 
     <div class="binding-rec {{ rec_class.get(binding_recommendation, 'binding-rec-conditions') }}">
         <div class="binding-rec-title">Recommended Action: {{ binding_recommendation }}</div>
@@ -436,70 +468,6 @@
     </div>
     {% endif %}
 </div>
-
-{# ===== ADDITIONAL ANALYSIS SECTIONS ===== #}
-{% if sections.policy_terms_analysis %}
-<div class="section page-break">
-    <h1>Policy Terms &amp; Critical Features</h1>
-    <div class="section-content">
-        {{ sections.policy_terms_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.incident_response_evaluation %}
-<div class="section page-break">
-    <h1>Incident Response Evaluation</h1>
-    <div class="section-content">
-        {{ sections.incident_response_evaluation | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.business_interruption_analysis %}
-<div class="section">
-    <h1>Business Interruption Analysis</h1>
-    <div class="section-content">
-        {{ sections.business_interruption_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.social_engineering_analysis %}
-<div class="section">
-    <h1>Social Engineering Analysis</h1>
-    <div class="section-content">
-        {{ sections.social_engineering_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.vendor_dependency_analysis %}
-<div class="section">
-    <h1>Vendor &amp; Dependency Analysis</h1>
-    <div class="section-content">
-        {{ sections.vendor_dependency_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.regulatory_compliance %}
-<div class="section page-break">
-    <h1>Compliance &amp; Regulatory Considerations</h1>
-    <div class="section-content">
-        {{ sections.regulatory_compliance | md_to_html }}
-    </div>
-</div>
-{% endif %}
-
-{% if sections.msp_specific_analysis %}
-<div class="section page-break">
-    <h1>Industry-Specific Considerations</h1>
-    <div class="section-content">
-        {{ sections.msp_specific_analysis | md_to_html }}
-    </div>
-</div>
-{% endif %}
 
 {# ===== DOCUMENT CONTROL ===== #}
 <div class="section page-break">

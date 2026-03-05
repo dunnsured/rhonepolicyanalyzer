@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rhone-policy-analyzer"
-version = "0.1.0"
+version = "0.4.0"
 description = "RhôneRisk Cyber Insurance Policy Analyzer - AI-powered policy scoring and report generation"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,6 +21,9 @@ dependencies = [
     "pyyaml>=6.0",
     "httpx>=0.28.0",
     "boto3>=1.35.0",
+    "bcrypt>=4.0.0",
+    "PyJWT>=2.8.0",
+    "APScheduler>=3.10.0",
 ]
 
 [project.optional-dependencies]

@@ -2,6 +2,7 @@
 
 All analysis endpoints are protected by local JWT authentication.
 Each user has an isolated environment — they only see their own analyses.
+Analysis metadata is persisted to Supabase (or SQLite fallback) via app.database.
 """
 
 import asyncio
@@ -11,7 +12,7 @@ import shutil
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -24,6 +25,7 @@ from app.analysis.engine import AnalysisEngine
 from app.auth import (
     AuthUser,
     get_current_user,
+    get_user_by_id,
     user_registry,
     create_user,
     authenticate_user,
@@ -35,6 +37,26 @@ from app.models.requests import ClientInfo
 from app.models.responses import AnalysisSummaryResponse, AnalysisStatusResponse, HealthResponse
 from app.models.scoring import PolicyAnalysis
 from app.monitoring import registry
+from app.billing import (
+    get_user_billing_info,
+    get_teaser_data,
+    unlock_with_credit,
+    create_checkout_session,
+    handle_stripe_webhook,
+    is_first_analysis,
+    get_user_credits,
+    STRIPE_PUBLISHABLE_KEY,
+)
+from app.integrations import (
+    notify_new_user,
+    notify_analysis_started,
+    notify_analysis_completed,
+    notify_teaser_viewed,
+    notify_purchase_completed,
+    notify_subscription_started,
+    send_klaviyo_email,
+    track_klaviyo_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +83,15 @@ def _get_r2_client():
     return R2StorageClient()
 
 
+def _persist_analysis_update(analysis_id: str, **fields):
+    """Persist analysis metadata updates to the database (best-effort)."""
+    try:
+        from app.database import db
+        db.update_analysis(analysis_id, **fields)
+    except Exception as e:
+        logger.warning("[%s] Failed to persist analysis update: %s", analysis_id, e)
+
+
 # ---------------------------------------------------------------------------
 # Background analysis task (per-user)
 # ---------------------------------------------------------------------------
@@ -82,6 +113,7 @@ def _run_analysis_background(
             status=status,
             progress=progress,
         )
+        _persist_analysis_update(analysis_id, status=status)
 
     try:
         progress_callback("extracting", 10)
@@ -106,23 +138,50 @@ def _run_analysis_background(
             if pdfs:
                 report_pdf_path = pdfs[-1]
 
+        has_report = False
+        report_r2_key = None
+
         if report_pdf_path and report_pdf_path.exists() and _r2_configured():
             try:
                 r2 = _get_r2_client()
                 report_r2_key = f"reports/{user_id}/{analysis_id}/{report_pdf_path.name}"
                 r2.upload_file(report_r2_key, report_pdf_path.read_bytes())
                 store.report_r2_paths[analysis_id] = report_r2_key
+                has_report = True
                 logger.info("[%s] Report uploaded to R2: %s", analysis_id, report_r2_key)
             except Exception as e:
                 logger.warning("[%s] R2 upload failed, keeping local copy: %s", analysis_id, e)
                 store.report_paths[analysis_id] = report_pdf_path
+                has_report = True
         elif report_pdf_path and report_pdf_path.exists():
             store.report_paths[analysis_id] = report_pdf_path
+            has_report = True
 
         store.statuses[analysis_id] = AnalysisStatusResponse(
             analysis_id=analysis_id,
             status="completed",
             progress=100,
+        )
+
+        # Persist completed analysis metadata to database
+        completed_at = datetime.now(timezone.utc).isoformat()
+        _persist_analysis_update(
+            analysis_id,
+            status="completed",
+            overall_score=analysis.overall_score,
+            overall_rating=analysis.overall_rating,
+            binding_recommendation=analysis.binding_recommendation,
+            red_flag_count=analysis.red_flag_count,
+            critical_gap_count=len(analysis.critical_gaps) if analysis.critical_gaps else 0,
+            has_report=has_report,
+            report_r2_key=report_r2_key,
+            total_duration_seconds=record.total_duration_seconds if record else 0,
+            scoring_input_tokens=record.scoring_input_tokens if record else 0,
+            scoring_output_tokens=record.scoring_output_tokens if record else 0,
+            narrative_input_tokens=record.narrative_input_tokens if record else 0,
+            narrative_output_tokens=record.narrative_output_tokens if record else 0,
+            page_count=record.page_count if record else 0,
+            completed_at=completed_at,
         )
 
     except Exception as e:
@@ -135,6 +194,12 @@ def _run_analysis_background(
         )
         if record:
             record.mark_failed(str(e))
+        _persist_analysis_update(
+            analysis_id,
+            status="failed",
+            error=str(e),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     finally:
         shutil.rmtree(pdf_dir, ignore_errors=True)
@@ -163,16 +228,35 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("R2 storage not configured — reports will be stored locally only.")
 
-    logger.info("Local JWT authentication enabled (SQLite + bcrypt).")
+    # Log which database backend is active
+    from app.database import db
+    backend_name = type(db).__name__
+    logger.info("Database backend: %s", backend_name)
+    logger.info("Local JWT authentication enabled.")
     logger.info("RhôneRisk Policy Analyzer started. Model: %s", settings.claude_model)
+
+    # Start nudge scheduler for follow-up emails/SMS
+    try:
+        from app.nudges import start_nudge_scheduler, stop_nudge_scheduler
+        start_nudge_scheduler()
+    except Exception as e:
+        logger.warning("Failed to start nudge scheduler: %s", e)
+
     yield
+
+    # Stop nudge scheduler on shutdown
+    try:
+        from app.nudges import stop_nudge_scheduler
+        stop_nudge_scheduler()
+    except Exception:
+        pass
     logger.info("RhôneRisk Policy Analyzer shutting down.")
 
 
 app = FastAPI(
     title="RhôneRisk Cyber Insurance Policy Analyzer",
     description="AI-powered cyber insurance policy analysis with proprietary 21-section framework and 4-tier maturity scoring.",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -191,7 +275,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 async def health_check():
     return HealthResponse(
         status="ok",
-        version="0.3.0",
+        version="0.4.0",
         knowledge_base_loaded=_validate_knowledge_base(),
     )
 
@@ -212,6 +296,8 @@ async def auth_register(request: Request):
     email = body.get("email", "").strip()
     password = body.get("password", "")
     display_name = body.get("display_name", "")
+    phone = body.get("phone", "").strip()
+    sms_opt_in = bool(body.get("sms_opt_in", False))
 
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
@@ -219,8 +305,28 @@ async def auth_register(request: Request):
     # create_user validates email format and password length, raises HTTPException on error
     user = create_user(email=email, password=password, display_name=display_name)
 
+    # Update phone/sms_opt_in if provided
+    if phone or sms_opt_in:
+        try:
+            from app.database import db
+            if hasattr(db, '_rest'):
+                # Supabase backend — update via REST
+                import httpx
+                db._rest("PATCH", f"app_users?id=eq.{user.id}", json={
+                    "phone": phone,
+                    "sms_opt_in": sms_opt_in,
+                })
+        except Exception as e:
+            logger.warning("Failed to update phone/sms_opt_in for user %s: %s", user.id, e)
+
     # Generate tokens immediately (no email confirmation needed)
     tokens = generate_tokens(user)
+
+    # Send integration notifications (fire and forget)
+    try:
+        notify_new_user(email, display_name)
+    except Exception as e:
+        logger.warning("Failed to send new user notifications: %s", e)
 
     return JSONResponse(content={
         "access_token": tokens["access_token"],
@@ -366,6 +472,19 @@ async def analyze_policy(
         progress=0,
     )
 
+    # Persist analysis record to database
+    try:
+        from app.database import db
+        db.create_analysis(
+            analysis_id=analysis_id,
+            user_id=user.id,
+            client_name=client_name or "Unknown",
+            filename=file.filename,
+            file_size_bytes=len(content),
+        )
+    except Exception as e:
+        logger.warning("[%s] Failed to persist analysis to database: %s", analysis_id, e)
+
     background_tasks.add_task(
         _run_analysis_background,
         analysis_id=analysis_id,
@@ -374,6 +493,33 @@ async def analyze_policy(
         client_info=client_info,
         pdf_dir=pdf_dir,
     )
+
+    # Send integration notifications (fire and forget)
+    try:
+        notify_analysis_started(user.email, file.filename, analysis_id)
+    except Exception as e:
+        logger.warning("Failed to send analysis started notifications: %s", e)
+
+    # Send Klaviyo "analysis running" email (Email 1)
+    try:
+        send_klaviyo_email(
+            to_email=user.email,
+            subject="Your Rh\u00f4neRisk analysis is running",
+            body=(
+                f"Hi {user.display_name or 'there'},\n\n"
+                f"We've received your policy and our analysis engine is now running.\n\n"
+                f"Here's what we're checking:\n"
+                f"- Exclusion clauses\n"
+                f"- Ransomware sublimits\n"
+                f"- Social engineering coverage\n"
+                f"- Incident response provisions\n"
+                f"- And 17 more categories\n\n"
+                f"Your high-level findings will be ready in under 5 minutes."
+            ),
+            user_name=user.display_name,
+        )
+    except Exception as e:
+        logger.warning("Failed to send analysis running email: %s", e)
 
     return JSONResponse(
         status_code=202,
@@ -521,14 +667,46 @@ async def download_report(analysis_id: str, user: AuthUser = Depends(get_current
 
 @app.get("/api/v1/analyses")
 async def list_analyses(user: AuthUser = Depends(get_current_user)):
-    """Return all analysis records for the authenticated user."""
+    """Return all analysis records for the authenticated user.
+
+    Merges in-memory monitoring data with persisted database records.
+    """
     store = user_registry.get_store(user.id)
-    # Filter the global registry to only show this user's analyses
+
+    # Get in-memory records from the monitoring registry
     user_analyses = []
+    seen_ids = set()
     for record_dict in registry.list_all():
         aid = record_dict.get("analysis_id", "")
         if user_registry.verify_ownership(user.id, aid):
             user_analyses.append(record_dict)
+            seen_ids.add(aid)
+
+    # Also fetch persisted records from the database (for analyses from previous sessions)
+    try:
+        from app.database import db
+        db_analyses = db.list_user_analyses(user.id, limit=50)
+        for row in db_analyses:
+            aid = row.get("id", "")
+            if aid not in seen_ids:
+                # Convert DB row to monitoring-compatible format
+                user_analyses.append({
+                    "analysis_id": aid,
+                    "client_name": row.get("client_name", ""),
+                    "filename": row.get("filename", ""),
+                    "status": row.get("status", "unknown"),
+                    "start_time": row.get("created_at"),
+                    "total_duration_seconds": row.get("total_duration_seconds", 0),
+                    "overall_score": row.get("overall_score"),
+                    "overall_rating": row.get("overall_rating"),
+                    "binding_recommendation": row.get("binding_recommendation"),
+                    "red_flag_count": row.get("red_flag_count", 0),
+                    "has_report": row.get("has_report", False),
+                })
+                seen_ids.add(aid)
+    except Exception as e:
+        logger.warning("Failed to fetch persisted analyses: %s", e)
+
     return JSONResponse(content={"analyses": user_analyses})
 
 
@@ -599,38 +777,73 @@ async def get_dashboard(user: AuthUser = Depends(get_current_user)):
 
     Aggregates per-user stats (total/completed/failed analyses, average score)
     and returns the most recent analyses with scores, client names, and report links.
+    Merges in-memory data with persisted database records.
     """
     store = user_registry.get_store(user.id)
 
-    # Collect this user's analysis records from the monitoring registry
+    # Collect this user's analysis records — merge in-memory + database
     user_analyses = []
+    seen_ids = set()
+
+    # In-memory records from monitoring registry
     for record_dict in registry.list_all():
         aid = record_dict.get("analysis_id", "")
         if user_registry.verify_ownership(user.id, aid):
-            user_analyses.append(record_dict)
+            entry = dict(record_dict)
+            # Enrich with score data from in-memory store
+            if aid in store.analyses:
+                analysis_obj = store.analyses[aid]
+                entry["overall_score"] = analysis_obj.overall_score
+                entry["overall_rating"] = analysis_obj.overall_rating
+                entry["binding_recommendation"] = analysis_obj.binding_recommendation
+                entry["red_flag_count"] = analysis_obj.red_flag_count
+            entry["has_report"] = (
+                aid in store.report_paths or aid in store.report_r2_paths
+            )
+            user_analyses.append(entry)
+            seen_ids.add(aid)
+
+    # Persisted records from database (for analyses from previous sessions)
+    try:
+        from app.database import db
+        db_analyses = db.list_user_analyses(user.id, limit=50)
+        for row in db_analyses:
+            aid = row.get("id", "")
+            if aid not in seen_ids:
+                user_analyses.append({
+                    "analysis_id": aid,
+                    "client_name": row.get("client_name", ""),
+                    "filename": row.get("filename", ""),
+                    "status": row.get("status", "unknown"),
+                    "start_time": row.get("created_at"),
+                    "total_duration_seconds": row.get("total_duration_seconds", 0),
+                    "overall_score": row.get("overall_score"),
+                    "overall_rating": row.get("overall_rating"),
+                    "binding_recommendation": row.get("binding_recommendation"),
+                    "red_flag_count": row.get("red_flag_count", 0),
+                    "has_report": row.get("has_report", False),
+                })
+                seen_ids.add(aid)
+    except Exception as e:
+        logger.warning("Failed to fetch persisted analyses for dashboard: %s", e)
 
     total = len(user_analyses)
     completed = [a for a in user_analyses if a.get("status") == "completed"]
     failed = [a for a in user_analyses if a.get("status") == "failed"]
     in_progress = total - len(completed) - len(failed)
 
-    # Calculate average score across completed analyses that have a PolicyAnalysis
-    scores = []
-    for a in completed:
-        aid = a.get("analysis_id", "")
-        if aid in store.analyses:
-            analysis_obj = store.analyses[aid]
-            scores.append(analysis_obj.overall_score)
+    # Calculate average score
+    scores = [a["overall_score"] for a in completed if a.get("overall_score") is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
-    # Calculate average duration for completed analyses
+    # Calculate average duration
     durations = [a["total_duration_seconds"] for a in completed if a.get("total_duration_seconds", 0) > 0]
     avg_duration = round(sum(durations) / len(durations), 1) if durations else None
 
     # Build recent analyses list (up to 20, most recent first)
     recent = []
     for a in user_analyses[:20]:
-        aid = a.get("analysis_id", "")
+        aid = a.get("analysis_id", a.get("id", ""))
         entry = {
             "analysis_id": aid,
             "client_name": a.get("client_name", ""),
@@ -638,29 +851,33 @@ async def get_dashboard(user: AuthUser = Depends(get_current_user)):
             "status": a.get("status", "unknown"),
             "start_time": a.get("start_time"),
             "total_duration_seconds": a.get("total_duration_seconds", 0),
+            "overall_score": a.get("overall_score"),
+            "overall_rating": a.get("overall_rating"),
+            "binding_recommendation": a.get("binding_recommendation"),
+            "red_flag_count": a.get("red_flag_count"),
+            "has_report": a.get("has_report", False),
         }
-        # Enrich with score data if the analysis is completed and stored
-        if aid in store.analyses:
-            analysis_obj = store.analyses[aid]
-            entry["overall_score"] = analysis_obj.overall_score
-            entry["overall_rating"] = analysis_obj.overall_rating
-            entry["binding_recommendation"] = analysis_obj.binding_recommendation
-            entry["red_flag_count"] = analysis_obj.red_flag_count
-        # Check if a report is available
-        entry["has_report"] = (
-            aid in store.report_paths or aid in store.report_r2_paths
-        )
         recent.append(entry)
 
-    # Member since date — look up from DB since token doesn't carry created_at
+    # Member since date — look up from database
     member_since = None
     try:
         from app.auth import get_user_by_id
         db_user = get_user_by_id(user.id)
         if db_user and db_user.created_at:
-            created_ts = float(db_user.created_at)
-            member_since = datetime.fromtimestamp(created_ts).strftime("%B %d, %Y")
-    except (ValueError, TypeError, OSError):
+            created_str = db_user.created_at
+            # Handle both timestamp (float) and ISO string formats
+            try:
+                created_ts = float(created_str)
+                member_since = datetime.fromtimestamp(created_ts).strftime("%B %d, %Y")
+            except (ValueError, TypeError):
+                # ISO format from Supabase
+                try:
+                    dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    member_since = dt.strftime("%B %d, %Y")
+                except (ValueError, TypeError):
+                    member_since = created_str
+    except Exception:
         pass
 
     return JSONResponse(content={
@@ -680,6 +897,170 @@ async def get_dashboard(user: AuthUser = Depends(get_current_user)):
         },
         "recent_analyses": recent,
     })
+
+
+# ---------------------------------------------------------------------------
+# Billing & Monetization endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/billing/credits")
+async def get_credits(user: AuthUser = Depends(get_current_user)):
+    """Return user's credit balance, subscription status, and pricing info."""
+    try:
+        info = get_user_billing_info(user.id)
+        return JSONResponse(content=info)
+    except Exception as e:
+        logger.error("Failed to get billing info for %s: %s", user.id, e)
+        # Fallback: return minimal info
+        return JSONResponse(content={
+            "credits": 0,
+            "subscription": None,
+            "total_analyses": 0,
+            "recent_purchases": [],
+            "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY,
+            "pricing": {},
+        })
+
+
+@app.post("/api/v1/billing/create-checkout-session")
+async def billing_create_checkout(request: Request, user: AuthUser = Depends(get_current_user)):
+    """Create a Stripe Checkout Session for single report or subscription."""
+    body = await request.json()
+    purchase_type = body.get("type", "single_report")
+    analysis_id = body.get("analysis_id", "")
+    plan = body.get("plan", "starter")
+
+    if purchase_type == "single_report":
+        mode = "single"
+    elif purchase_type == "subscription":
+        mode = plan
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid purchase type: {purchase_type}")
+
+    result = create_checkout_session(
+        user_id=user.id,
+        email=user.email,
+        name=user.display_name,
+        mode=mode,
+        analysis_id=analysis_id,
+    )
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return JSONResponse(content=result)
+
+
+@app.post("/api/v1/billing/webhook")
+async def billing_webhook(request: Request):
+    """Handle Stripe webhook events (no auth required — verified by signature)."""
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    result = handle_stripe_webhook(payload, sig_header)
+
+    if "error" in result:
+        logger.error("Stripe webhook error: %s", result["error"])
+        return JSONResponse(status_code=400, content=result)
+
+    # Send integration notifications based on webhook result
+    if result.get("processed"):
+        try:
+            event_type = result.get("type", "")
+            if event_type == "single_report":
+                # Get user email from metadata
+                import json
+                event_data = json.loads(payload)
+                metadata = event_data.get("data", {}).get("object", {}).get("metadata", {})
+                user_id = metadata.get("user_id", "")
+                aid = result.get("analysis_id", "")
+                if user_id:
+                    u = get_user_by_id(user_id)
+                    if u:
+                        notify_purchase_completed(u.email, 49.00, aid)
+            elif event_type == "subscription":
+                import json
+                event_data = json.loads(payload)
+                metadata = event_data.get("data", {}).get("object", {}).get("metadata", {})
+                user_id = metadata.get("user_id", "")
+                plan_name = result.get("plan", "starter")
+                if user_id:
+                    u = get_user_by_id(user_id)
+                    if u:
+                        from app.billing import PRICING
+                        amount = PRICING.get(f"{plan_name}_monthly", 0) / 100
+                        notify_subscription_started(u.email, plan_name, amount)
+        except Exception as e:
+            logger.warning("Failed to send webhook notifications: %s", e)
+
+    return JSONResponse(content={"received": True})
+
+
+@app.post("/api/v1/billing/unlock")
+async def billing_unlock(request: Request, user: AuthUser = Depends(get_current_user)):
+    """Unlock an analysis using a credit."""
+    body = await request.json()
+    aid = body.get("analysis_id", "")
+    if not aid:
+        raise HTTPException(status_code=400, detail="analysis_id is required")
+
+    result = unlock_with_credit(aid, user.id)
+
+    if not result.get("success"):
+        error = result.get("error", "Unknown error")
+        if "Insufficient" in error:
+            raise HTTPException(status_code=402, detail=error)
+        raise HTTPException(status_code=400, detail=error)
+
+    # Send notification
+    try:
+        notify_purchase_completed(user.email, 0.0, aid)
+    except Exception:
+        pass
+
+    return JSONResponse(content=result)
+
+
+@app.post("/api/v1/billing/portal")
+async def billing_portal(user: AuthUser = Depends(get_current_user)):
+    """Create a Stripe Customer Portal session."""
+    from app.billing import get_or_create_stripe_customer, _stripe_request
+    customer_id = get_or_create_stripe_customer(user.id, user.email, user.display_name)
+    if not customer_id:
+        raise HTTPException(status_code=500, detail="Failed to get Stripe customer")
+
+    result = _stripe_request("POST", "billing_portal/sessions", {
+        "customer": customer_id,
+        "return_url": f"{os.getenv('BASE_URL', 'https://rhonepolicyanalyzer-production.up.railway.app')}/#dashboard",
+    })
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return JSONResponse(content={"portal_url": result.get("url")})
+
+
+# ---------------------------------------------------------------------------
+# Teaser endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/analyze/{analysis_id}/teaser")
+async def get_analysis_teaser(analysis_id: str, user: AuthUser = Depends(get_current_user)):
+    """Return teaser data for a completed but locked analysis."""
+    teaser = get_teaser_data(analysis_id, user.id)
+    if teaser is None:
+        raise HTTPException(status_code=404, detail="Analysis not found.")
+
+    # If already unlocked, redirect to full analysis
+    if teaser.get("unlocked"):
+        return JSONResponse(content={"unlocked": True, "analysis_id": analysis_id})
+
+    # Send teaser viewed notification (first time only)
+    try:
+        notify_teaser_viewed(user.email, analysis_id, teaser.get("red_flag_count", 0))
+    except Exception:
+        pass
+
+    return JSONResponse(content=teaser)
 
 
 # ---------------------------------------------------------------------------

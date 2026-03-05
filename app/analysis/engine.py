@@ -24,6 +24,11 @@ from app.models.requests import ClientInfo
 from app.models.scoring import PolicyAnalysis, PolicyMetadata, ReportSections
 from app.monitoring import AnalysisRecord
 from app.report.generator import generate_pdf_report
+from app.risk_quantification import (
+    compute_risk_quantification,
+    risk_quantification_to_markdown,
+    risk_quantification_to_html,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,7 @@ class AnalysisEngine:
         2. PARSE - Extract structured metadata
         3. ANALYZE (Call 1) - Score all coverages with detailed analysis
         4. POST-PROCESS - Apply red flag penalties, calculate overall score
+        4b. RISK QUANTIFICATION - Compute scenario losses in Python
         5. ANALYZE (Call 2) - Generate report narrative with strategic recs
         6. GENERATE - Create branded PDF report
 
@@ -193,6 +199,35 @@ class AnalysisEngine:
         if record:
             record.end_stage("post_processing")
 
+        # Step 4b: RISK QUANTIFICATION (Python-computed, not Claude)
+        risk_quant_md = ""
+        risk_quant_html = ""
+        try:
+            _log("INFO", "risk_quantification", f"[{analysis_id}] Step 4b: Computing risk quantification scenarios")
+
+            revenue_str = client_info.annual_revenue or ""
+            employee_str = client_info.employee_count or ""
+            industry = client_info.industry or "Technology"
+
+            if revenue_str:
+                rq_result = compute_risk_quantification(
+                    revenue_str=revenue_str,
+                    employee_str=employee_str,
+                    industry=industry,
+                )
+                risk_quant_md = risk_quantification_to_markdown(rq_result)
+                risk_quant_html = risk_quantification_to_html(rq_result)
+                _log("INFO", "risk_quantification",
+                     f"[{analysis_id}] Risk quantification computed: "
+                     f"EAL=${rq_result.total_expected_annual_loss:,.0f}, "
+                     f"{len(rq_result.scenarios)} scenarios")
+            else:
+                _log("WARNING", "risk_quantification",
+                     f"[{analysis_id}] Skipping risk quantification — no revenue data provided")
+        except Exception as e:
+            _log("WARNING", "risk_quantification",
+                 f"[{analysis_id}] Risk quantification failed (non-fatal): {e}")
+
         # Step 5: ANALYZE - Call 2 (Report Narrative with strategic recs)
         _log("INFO", "generating_narrative", f"[{analysis_id}] Step 5: Generating report narrative (API Call 2)")
         if record:
@@ -209,6 +244,7 @@ class AnalysisEngine:
                 metadata_context=metadata_context,
                 scores_context=scores_context,
                 client_context=client_context,
+                risk_quantification_md=risk_quant_md,
             )
             if record and narrative_usage:
                 record.narrative_input_tokens = narrative_usage.get("input_tokens", 0)
@@ -259,7 +295,7 @@ class AnalysisEngine:
             pdf_filename = f"RhoneRisk_Analysis_{safe_name}_{date_str}.pdf"
             pdf_path_out = output_dir / pdf_filename
 
-            generate_pdf_report(analysis, pdf_path_out)
+            generate_pdf_report(analysis, pdf_path_out, risk_quantification_html=risk_quant_html)
             report_size = pdf_path_out.stat().st_size / 1024
             _log("INFO", "generating_report",
                  f"[{analysis_id}] Report generated: {pdf_filename} ({report_size:.0f} KB)")
