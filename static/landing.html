@@ -420,6 +420,117 @@
     .faq-item h3 { font-size: 17px; color: var(--navy); margin-bottom: 10px; font-weight: 700; }
     .faq-item p { font-size: 15px; color: var(--gray-600); }
 
+    /* === OUR STORY === */
+    .our-story {
+      background: var(--navy); color: var(--white);
+      padding: 100px 0 80px; position: relative; overflow: hidden;
+    }
+    .our-story::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at 20% 50%, rgba(212,168,67,0.06) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(212,168,67,0.04) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .our-story-inner { position: relative; z-index: 1; }
+    .our-story-header { text-align: center; margin-bottom: 56px; }
+    .our-story-header h2 { color: var(--white); font-size: clamp(32px, 5vw, 48px); margin-bottom: 16px; }
+    .our-story-header .lead { color: rgba(255,255,255,0.6); max-width: 640px; margin: 0 auto; font-size: 17px; }
+
+    /* Photo Mosaic */
+    .story-mosaic {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: minmax(200px, auto);
+      gap: 12px;
+      margin-bottom: 64px;
+    }
+    .story-photo {
+      position: relative; overflow: hidden; border-radius: var(--radius);
+      background: var(--navy-light);
+    }
+    .story-photo img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform 0.4s ease;
+    }
+    .story-photo:hover img { transform: scale(1.05); }
+    .photo-caption {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 32px 16px 12px;
+      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
+      font-size: 12px; color: rgba(255,255,255,0.85);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .story-photo:hover .photo-caption { opacity: 1; }
+
+    /* Mosaic layout — featured sizes */
+    .sp-1 { grid-column: 1 / 2; grid-row: 1 / 3; }
+    .sp-2 { grid-column: 2 / 4; grid-row: 1 / 2; }
+    .sp-3 { grid-column: 2 / 3; grid-row: 2 / 3; }
+    .sp-4 { grid-column: 1 / 2; grid-row: 3 / 4; }
+    .sp-5 { grid-column: 2 / 3; grid-row: 3 / 4; }
+    .sp-6 { grid-column: 3 / 4; grid-row: 2 / 4; }
+    .sp-7 { grid-column: 3 / 4; grid-row: 4 / 5; }
+    .sp-8 { grid-column: 1 / 2; grid-row: 4 / 5; }
+    .sp-9 { grid-column: 2 / 3; grid-row: 4 / 5; }
+    .sp-10 { grid-column: 1 / 4; grid-row: 5 / 6; max-height: 420px; }
+
+    /* Narrative + Pull Quote */
+    .story-narrative {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+      margin-bottom: 64px;
+    }
+    .story-text h3 {
+      font-size: 24px; font-weight: 800; color: var(--white);
+      margin-bottom: 16px; line-height: 1.3;
+    }
+    .story-text p {
+      font-size: 16px; line-height: 1.7; color: rgba(255,255,255,0.65);
+      margin-bottom: 16px;
+    }
+    .story-text strong { color: var(--cyan); font-weight: 600; }
+    .story-pullquote {
+      background: rgba(212,168,67,0.08);
+      border-left: 4px solid var(--cyan);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 32px; margin-bottom: 0;
+    }
+    .story-pullquote::before {
+      content: '\201C'; display: block;
+      font-size: 48px; line-height: 1; color: var(--cyan); opacity: 0.4;
+      margin-bottom: 8px;
+    }
+    .story-pullquote blockquote {
+      font-size: 17px; font-style: italic; line-height: 1.7;
+      color: rgba(255,255,255,0.8); margin-bottom: 20px;
+    }
+    .story-pullquote-author {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .story-pullquote-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--cyan); color: var(--navy);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 16px;
+    }
+    .story-pullquote-name { font-weight: 700; color: var(--white); font-size: 15px; }
+    .story-pullquote-title { font-size: 13px; color: rgba(255,255,255,0.5); }
+
+    /* Closing */
+    .story-closing {
+      text-align: center; padding-top: 48px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .story-closing h3 {
+      font-size: 28px; font-weight: 800; color: var(--white); margin-bottom: 16px;
+    }
+    .story-closing p {
+      font-size: 16px; color: rgba(255,255,255,0.6); max-width: 600px; margin: 0 auto 12px;
+    }
+    .story-tagline {
+      font-size: 22px; font-weight: 700; font-style: italic;
+      color: var(--cyan); margin-top: 24px;
+    }
+
     /* === FINAL CTA === */
     .final-cta {
       background: var(--navy); color: var(--white); text-align: center;
@@ -477,6 +588,12 @@
       .stat-item:last-child { border-bottom: none; }
       .guarantee-card { padding: 40px 28px; }
       .nav-links-lp { display: none; }
+      .story-mosaic { grid-template-columns: 1fr 1fr; }
+      .sp-1 { grid-column: 1 / 3; grid-row: auto; }
+      .sp-2 { grid-column: 1 / 3; grid-row: auto; }
+      .sp-3, .sp-4, .sp-5, .sp-6, .sp-7, .sp-8, .sp-9 { grid-column: auto; grid-row: auto; }
+      .sp-10 { grid-column: 1 / 3; grid-row: auto; }
+      .story-narrative { grid-template-columns: 1fr; gap: 32px; }
       .hero { padding: 72px 0 64px; }
       .hero h1 { font-size: clamp(30px, 7vw, 48px); }
       .vs-price { flex-direction: column; text-align: center; }
@@ -506,6 +623,7 @@
     <div class="nav-links-lp">
       <a href="#how-it-works">How It Works</a>
       <a href="#pricing">Pricing</a>
+      <a href="#our-story">Our Story</a>
       <a href="#faq-section">FAQ</a>
       <a href="/app#login" class="btn btn--primary nav-cta">Analyze My Policy &rarr;</a>
     </div>
@@ -1001,6 +1119,96 @@
         <h3>&ldquo;What happens after the analysis?&rdquo;</h3>
         <p>You'll have a clear picture and a prioritized action plan. Many clients ask us to help implement the changes. There's no obligation &mdash; but the opportunity is usually obvious once the report lands.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- OUR STORY -->
+<section class="our-story" id="our-story">
+  <div class="container our-story-inner">
+    <div class="our-story-header">
+      <div class="eyebrow">Our Story</div>
+      <h2>Built from the Inside Out</h2>
+      <p class="lead">Years of panels, summits, podcasts, and partnerships inside the cyber insurance industry. All leading to one realization &mdash; and one tool to fix it.</p>
+    </div>
+
+    <!-- Photo Mosaic -->
+    <div class="story-mosaic">
+      <div class="story-photo sp-1">
+        <img src="/static/images/masters-conference-panel.jpg" alt="Ryan Dunn on panel at The Masters Conference" loading="lazy" />
+        <div class="photo-caption">The Masters Conference &mdash; panelists from legal, insurance, DFIR, and recovery discuss real-world cyber cases</div>
+      </div>
+      <div class="story-photo sp-2">
+        <img src="/static/images/cyber-risk-summit-dc.jpg" alt="Ryan at International Cyber Risk Summit, Washington DC" loading="lazy" />
+        <div class="photo-caption">International Cyber Risk Summit &mdash; Washington, DC (July 2025)</div>
+      </div>
+      <div class="story-photo sp-3">
+        <img src="/static/images/webinar-demystifying-cyber.jpg" alt="Demystifying Cybersecurity and Cyber Insurance webinar panel" loading="lazy" />
+        <div class="photo-caption">Demystifying Cybersecurity &amp; Cyber Insurance for SMBs &mdash; thought leadership panel</div>
+      </div>
+      <div class="story-photo sp-4">
+        <img src="/static/images/cothrom-team-2015.jpg" alt="Ryan with the Cothrom team, est. 2015" loading="lazy" />
+        <div class="photo-caption">Cothrom (est. 2015) &mdash; where it all started. Early career roots in insurance.</div>
+      </div>
+      <div class="story-photo sp-5">
+        <img src="/static/images/industry-networking-event.jpg" alt="Ryan networking at a cyber insurance industry event" loading="lazy" />
+        <div class="photo-caption">Industry networking &mdash; building relationships with the people who shape cyber coverage</div>
+      </div>
+      <div class="story-photo sp-6">
+        <img src="/static/images/industry-partner-headshot.jpg" alt="Industry partner" loading="lazy" />
+        <div class="photo-caption">Industry partnerships that drive better outcomes</div>
+      </div>
+      <div class="story-photo sp-7">
+        <img src="/static/images/podcast-blue-team-alpha.jpg" alt="Ryan recording a podcast with Joe Kingland at Blue Team Alpha" loading="lazy" />
+        <div class="photo-caption">Recording with Joe Kingland, CISSP at Blue Team Alpha &mdash; knowledge shared, laughs had</div>
+      </div>
+      <div class="story-photo sp-8">
+        <img src="/static/images/ostra-trava-partnership.jpg" alt="Ryan Dunn, Director of Insurance at Trava, with Joe Johnson, President of Ostra Cybersecurity" loading="lazy" />
+        <div class="photo-caption">Cross-industry partnership &mdash; Trava &times; Ostra Cybersecurity</div>
+      </div>
+      <div class="story-photo sp-9">
+        <img src="/static/images/rooftop-industry-event.jpg" alt="Ryan at a rooftop industry event" loading="lazy" />
+        <div class="photo-caption">Rooftop industry event &mdash; the energy behind the work</div>
+      </div>
+      <div class="story-photo sp-10">
+        <img src="/static/images/murchison-linkedin-endorsement.jpg" alt="Jon Murchison, Founder of Blackpoint Cyber, endorsing Ryan Dunn on LinkedIn" loading="lazy" />
+        <div class="photo-caption">Jon Murchison, Founder of Blackpoint Cyber &mdash; &ldquo;Ryan Dunn is getting it done in the cyber insurance industry&rdquo;</div>
+      </div>
+    </div>
+
+    <!-- Narrative + Pull Quote -->
+    <div class="story-narrative">
+      <div class="story-text">
+        <h3>The problem was obvious. The fix didn&rsquo;t exist yet.</h3>
+        <p>Ryan Dunn spent years inside the cyber insurance industry &mdash; on panels, at summits, behind the mic on podcasts, and in the rooms where coverage decisions get made. He watched the same pattern repeat everywhere: <strong>brokers couldn&rsquo;t read the policies they were selling, clients couldn&rsquo;t understand what they were buying, and carriers kept adding exclusions nobody noticed.</strong></p>
+        <p>The analysis was always manual. Always slow. Always expensive. And always inconsistent. A $2M policy with a buried nation-state exclusion that would deny a ransomware claim? Nobody caught it until claim time. A sublimit that capped ransomware recovery at $250K on a $2M policy? Buried in the endorsements.</p>
+        <p>Every conference, every panel, every late-night conversation with underwriters and CISOs pointed to the same gap: <strong>the industry needed a tool that could stress-test a cyber policy the way a penetration tester stress-tests a network.</strong> Fast. Thorough. No conflicts of interest.</p>
+      </div>
+      <div>
+        <div class="story-pullquote">
+          <blockquote>&ldquo;Ryan Dunn is getting it done in the cyber insurance industry and really helping MSPs with their insurance needs! Highly recommend MSPs work with him!&rdquo;</blockquote>
+          <div class="story-pullquote-author">
+            <div class="story-pullquote-avatar">JM</div>
+            <div>
+              <div class="story-pullquote-name">Jon Murchison</div>
+              <div class="story-pullquote-title">Founder &amp; Executive Chairman, Blackpoint Cyber</div>
+            </div>
+          </div>
+        </div>
+        <div class="story-text" style="margin-top: 32px;">
+          <h3>Rh&ocirc;neRisk wasn&rsquo;t a side project.</h3>
+          <p>It was the answer to a question Ryan kept hearing from every direction: <strong>&ldquo;Why doesn&rsquo;t something like this exist?&rdquo;</strong></p>
+          <p>From Cothrom in 2015 to directing insurance at Trava, from recording podcasts with Blue Team Alpha to presenting at The Masters Conference and the International Cyber Risk Summit in DC &mdash; every step was building toward this.</p>
+          <p>A proprietary 21-category evaluation framework. Built by someone who&rsquo;s read thousands of policies and knows exactly where carriers hide the gaps. <strong>Not a chatbot. Not a checklist. A real analysis engine built by an insider.</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Closing -->
+    <div class="story-closing">
+      <h3>We&rsquo;ve been working toward this moment.</h3>
+      <p>Every panel. Every summit. Every policy reviewed. Every gap found. Every conversation with a business owner who discovered too late that their coverage had holes. It all led here.</p>
+      <p class="story-tagline">&ldquo;We&rsquo;re right on schedule.&rdquo;</p>
     </div>
   </div>
 </section>
