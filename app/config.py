@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     supabase_key: str = ""  # anon key
     supabase_service_role_key: str = ""  # service role key (preferred)
 
+    # Stripe
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
+
     # JWT
     jwt_secret: str = ""  # If empty, auto-generated and persisted to file
 
