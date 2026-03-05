@@ -1064,6 +1064,30 @@ async def get_analysis_teaser(analysis_id: str, user: AuthUser = Depends(get_cur
 
 
 # ---------------------------------------------------------------------------
+# Landing page routes
+# ---------------------------------------------------------------------------
+_LANDING_PAGE = _STATIC_DIR / "landing.html"
+
+
+@app.get("/", include_in_schema=False)
+async def serve_landing_page():
+    """Serve the marketing landing page at the root URL."""
+    return FileResponse(str(_LANDING_PAGE), media_type="text/html")
+
+
+@app.get("/landing", include_in_schema=False)
+async def serve_landing_alias():
+    """Serve landing page at /landing."""
+    return FileResponse(str(_LANDING_PAGE), media_type="text/html")
+
+
+@app.get("/landing.html", include_in_schema=False)
+async def serve_landing_html():
+    """Serve landing page at /landing.html."""
+    return FileResponse(str(_LANDING_PAGE), media_type="text/html")
+
+
+# ---------------------------------------------------------------------------
 # Frontend catch-all (must be last)
 # ---------------------------------------------------------------------------
 
